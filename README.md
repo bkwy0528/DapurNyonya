@@ -1,5 +1,5 @@
 
-  # DapurNyonya: Digtal Order Tracking &
+  # DapurNyonya: Digtal Order Tracking & production scheduling management system
 
   This is a code bundle for DapurNyonya: Digtal Order Tracking &. The original project is available at https://www.figma.com/design/gO6cJ2OIkcxVgymtIJoLgJ/DapurNyonya--Digtal-Order-Tracking--.
 
