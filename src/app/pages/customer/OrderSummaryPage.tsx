@@ -51,9 +51,9 @@ export default function OrderSummaryPage({ user }: OrderSummaryPageProps) {
   return (
     <div className="min-h-screen pb-6">
       {/* Header */}
-      <div className="bg-gradient-to-r from-orange-500 to-amber-500 text-white p-6">
-        <div className="max-w-4xl mx-auto">
-          <Link to="/customer/home" className="inline-flex items-center text-white hover:text-gray-100 mb-4">
+      <div className="page-hero">
+        <div className="page-hero__inner">
+          <Link to="/customer/home" className="page-back-link">
             <ArrowLeft className="w-5 h-5 mr-2" />
             <span className="text-lg">Back</span>
           </Link>
@@ -177,7 +177,7 @@ export default function OrderSummaryPage({ user }: OrderSummaryPageProps) {
             <Button
               size="lg"
               onClick={handleConfirmOrder}
-              className="w-full h-14 text-lg bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600"
+              className="w-full h-14 text-lg success-button"
             >
               <CheckCircle2 className="w-5 h-5 mr-2" />
               Confirm Order

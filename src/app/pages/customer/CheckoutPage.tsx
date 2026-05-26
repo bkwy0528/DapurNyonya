@@ -8,8 +8,11 @@ import { RadioGroup, RadioGroupItem } from '../../components/ui/radio-group';
 import { Textarea } from '../../components/ui/textarea';
 import { ArrowLeft, MapPin, Truck, Home as HomeIcon, Calendar } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
+import { getMaxPrepDaysFromCart } from '../../utils/business';
 import { User } from '../../App';
 import { toast } from 'sonner';
+import PageContainer from '../../components/ui/PageContainer';
+import FormSection from '../../components/ui/FormSection';
 
 interface CheckoutPageProps {
   user: User;
@@ -24,15 +27,26 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
   const [contactPhone, setContactPhone] = useState(user.phone);
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [deliveryDate, setDeliveryDate] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'ewallet' | 'debit' | ''>('');
+  const [paymentNote, setPaymentNote] = useState('');
 
-  // Get tomorrow's date as minimum
-  const getTomorrowDate = () => {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    return tomorrow.toISOString().split('T')[0];
+  // Compute minimum date based on preparation time of items in cart
+  const [minDate] = useState(() => {
+    const maxPrep = getMaxPrepDaysFromCart(cartItems);
+    const min = new Date();
+    min.setDate(min.getDate() + Math.max(1, maxPrep));
+    return min.toISOString().split('T')[0];
+  });
+
+  const getOrderCountForDate = (date: string) => {
+    const orders = JSON.parse(localStorage.getItem('orders') || '[]');
+    return orders.filter((o: any) => o.deliveryDate === date && o.status !== 'Rejected').length;
   };
 
-  const [minDate] = useState(getTomorrowDate());
+  const getLimitForDate = (date: string) => {
+    const limits = JSON.parse(localStorage.getItem('dailyLimits') || '{}');
+    return limits[date] || 0;
+  };
 
   // Delivery charge calculation based on postal code (simplified)
   const calculateDeliveryCharge = (): number => {
@@ -86,8 +100,21 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
       return;
     }
 
-    // Create order
-    const order = {
+    if (!paymentMethod) {
+      toast.error('Please select a payment method');
+      return;
+    }
+
+    // Check capacity
+    const limit = getLimitForDate(deliveryDate);
+    const currentCount = getOrderCountForDate(deliveryDate);
+    if (limit > 0 && currentCount >= limit) {
+      toast.error('Selected date is fully booked. Please choose another date');
+      return;
+    }
+
+    // Build pending order object and pass to confirmation step
+    const pendingOrder = {
       id: Date.now().toString(),
       customerId: user.id,
       customerName: user.name,
@@ -100,20 +127,17 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
       deliveryAddress: deliveryMethod === 'delivery' ? deliveryAddress : 'Pickup',
       postalCode: deliveryMethod === 'delivery' ? postalCode : '',
       specialInstructions,
-      status: 'Pending Approval',
+      paymentMethod,
+      paymentNote,
+      status: paymentMethod === 'cash' ? 'Pending Confirmation' : 'Pending Payment',
       orderDate: new Date().toISOString(),
       deliveryDate,
+      finalizedNumber: null,
     };
 
-    // Save order
-    const existingOrders = JSON.parse(localStorage.getItem('orders') || '[]');
-    localStorage.setItem('orders', JSON.stringify([...existingOrders, order]));
-
-    // Clear cart
-    clearCart();
-
-    toast.success('Order placed successfully!');
-    navigate('/customer/tracking');
+    // Store pending order temporarily in sessionStorage for confirmation page
+    sessionStorage.setItem('pendingOrder', JSON.stringify(pendingOrder));
+    navigate('/customer/order-confirmation');
   };
 
   if (cartItems.length === 0) {
@@ -121,19 +145,17 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
   }
 
   return (
-    <div className="min-h-screen pb-24">
+    <PageContainer>
       {/* Header */}
-      <div className="bg-gradient-to-r from-orange-500 to-amber-500 text-white p-6">
-        <div className="max-w-4xl mx-auto">
-          <Link to="/customer/cart" className="inline-flex items-center text-white hover:text-gray-100 mb-4">
-            <ArrowLeft className="w-5 h-5 mr-2" />
-            <span className="text-lg">Back to Cart</span>
-          </Link>
-          <h1 className="text-2xl">Checkout</h1>
-        </div>
+      <div className="page-hero page-hero--rounded">
+        <Link to="/customer/cart" className="page-back-link mb-2">
+          <ArrowLeft className="w-5 h-5 mr-2" />
+          <span className="text-lg">Back to Cart</span>
+        </Link>
+        <h1 className="text-2xl">Checkout</h1>
       </div>
 
-      <div className="max-w-4xl mx-auto px-6 py-8 space-y-6">
+      <div className="px-0 py-8 space-y-6">
         {/* Delivery Date */}
         <Card>
           <CardHeader>
@@ -143,20 +165,22 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
+            <FormSection>
               <Label htmlFor="deliveryDate" className="text-base">Select Date *</Label>
-              <Input
-                id="deliveryDate"
-                type="date"
-                value={deliveryDate}
-                onChange={(e) => setDeliveryDate(e.target.value)}
-                min={minDate}
-                className="h-12 text-base"
-              />
-              <p className="text-sm text-gray-600">
-                Orders require minimum 3-5 days advance notice
-              </p>
-            </div>
+              <Input id="deliveryDate" type="date" value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} min={minDate} className="text-base" />
+              <p className="text-sm text-gray-600">Orders require minimum 3-5 days advance notice</p>
+              {deliveryDate && (() => {
+                const limit = getLimitForDate(deliveryDate);
+                const count = getOrderCountForDate(deliveryDate);
+                if (limit > 0) {
+                  if (count >= limit) {
+                    return <p className="text-sm text-red-600">Selected date is fully booked. Please choose another date.</p>;
+                  }
+                  return <p className="text-sm text-green-700">Available slots: {Math.max(0, limit - count)} of {limit} remaining</p>;
+                }
+                return null;
+              })()}
+            </FormSection>
           </CardContent>
         </Card>
 
@@ -232,7 +256,7 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
                       value={postalCode}
                       onChange={(e) => setPostalCode(e.target.value)}
                       placeholder="e.g., 50470"
-                      className="pl-12 h-12 text-base"
+                      className="pl-12 text-base"
                       maxLength={5}
                     />
                   </div>
@@ -278,7 +302,7 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
         </Card>
 
         {/* Order Summary */}
-        <Card className="bg-gradient-to-r from-orange-50 to-amber-50 border-2 border-orange-200">
+        <Card className="brand-summary-card">
           <CardHeader>
             <CardTitle className="text-xl">Order Summary</CardTitle>
           </CardHeader>
@@ -316,13 +340,39 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
               </div>
             </div>
 
-            <Button
-              onClick={handlePlaceOrder}
-              size="lg"
-              className="w-full h-14 text-lg bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600"
-            >
-              Place Order
-            </Button>
+            <div className="space-y-4">
+              <div>
+                <Label className="text-base">Payment Method *</Label>
+                <div className="flex flex-col sm:flex-row gap-3 mt-2">
+                  <Button type="button" variant={paymentMethod === 'cash' ? 'secondary' : 'outline'} className={`w-full sm:w-auto px-4 py-3 ${paymentMethod === 'cash' ? 'border-orange-500 bg-orange-50' : ''}`} onClick={() => setPaymentMethod('cash')}>Cash</Button>
+                  <Button type="button" variant={paymentMethod === 'ewallet' ? 'secondary' : 'outline'} className={`w-full sm:w-auto px-4 py-3 ${paymentMethod === 'ewallet' ? 'border-orange-500 bg-orange-50' : ''}`} onClick={() => setPaymentMethod('ewallet')}>Touch 'n Go eWallet</Button>
+                  <Button type="button" variant={paymentMethod === 'debit' ? 'secondary' : 'outline'} className={`w-full sm:w-auto px-4 py-3 ${paymentMethod === 'debit' ? 'border-orange-500 bg-orange-50' : ''}`} onClick={() => setPaymentMethod('debit')}>Debit Card</Button>
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-base">Payment Note (optional)</Label>
+                <Input value={paymentNote} onChange={(e) => setPaymentNote(e.target.value)} className="mt-2" />
+              </div>
+
+              <div className="bg-white border rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-700">Subtotal:</span>
+                  <span className="font-semibold">RM {subtotal.toFixed(2)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-700">Delivery Charge:</span>
+                  <span className="font-semibold">{deliveryCharge === 0 ? 'FREE' : `RM ${deliveryCharge.toFixed(2)}`}</span>
+                </div>
+                <div className="flex items-center justify-between pt-3 border-t">
+                  <span className="font-bold text-gray-900">Total:</span>
+                  <span className="font-bold text-orange-600">RM {total.toFixed(2)}</span>
+                </div>
+                <div className="mt-3">
+                  <Button size="lg" onClick={handlePlaceOrder} className="w-full success-button">Proceed to Confirmation</Button>
+                </div>
+              </div>
+            </div>
 
             <p className="text-xs text-center text-gray-600">
               Orders require admin approval before processing
@@ -330,6 +380,6 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </PageContainer>
   );
 }

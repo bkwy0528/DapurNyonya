@@ -26,9 +26,9 @@ export default function CartPage({ user }: CartPageProps) {
     return (
       <div className="min-h-screen pb-24">
         {/* Header */}
-        <div className="bg-gradient-to-r from-orange-500 to-amber-500 text-white p-6">
-          <div className="max-w-4xl mx-auto">
-            <Link to="/customer/home" className="inline-flex items-center text-white hover:text-gray-100 mb-4">
+        <div className="page-hero">
+          <div className="page-hero__inner">
+            <Link to="/customer/home" className="page-back-link">
               <ArrowLeft className="w-5 h-5 mr-2" />
               <span className="text-lg">Back to Home</span>
             </Link>
@@ -45,7 +45,7 @@ export default function CartPage({ user }: CartPageProps) {
             <h2 className="text-2xl font-semibold text-gray-900 mb-3">Your cart is empty</h2>
             <p className="text-gray-600 mb-8">Add some delicious items to get started!</p>
             <Link to="/customer/home">
-              <Button className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600">
+              <Button className="brand-button">
                 Browse Products
               </Button>
             </Link>
@@ -58,9 +58,9 @@ export default function CartPage({ user }: CartPageProps) {
   return (
     <div className="min-h-screen pb-24">
       {/* Header */}
-      <div className="bg-gradient-to-r from-orange-500 to-amber-500 text-white p-6">
-        <div className="max-w-4xl mx-auto">
-          <Link to="/customer/home" className="inline-flex items-center text-white hover:text-gray-100 mb-4">
+      <div className="page-hero">
+        <div className="page-hero__inner">
+          <Link to="/customer/home" className="page-back-link">
             <ArrowLeft className="w-5 h-5 mr-2" />
             <span className="text-lg">Back to Home</span>
           </Link>
@@ -146,7 +146,7 @@ export default function CartPage({ user }: CartPageProps) {
         </div>
 
         {/* Summary */}
-        <Card className="bg-gradient-to-r from-orange-50 to-amber-50 border-2 border-orange-200">
+        <Card className="brand-summary-card">
           <CardContent className="p-6 space-y-4">
             <div className="flex items-center justify-between text-lg">
               <span className="text-gray-700">Subtotal:</span>
@@ -156,7 +156,7 @@ export default function CartPage({ user }: CartPageProps) {
             <Button
               onClick={handleCheckout}
               size="lg"
-              className="w-full h-14 text-lg bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600"
+              className="w-full h-14 text-lg success-button"
             >
               <ShoppingCart className="w-6 h-6 mr-2" />
               Proceed to Checkout

@@ -7,6 +7,7 @@ export interface CartItem {
   quantity: number;
   image: string;
   unit: string;
+  prepDays?: number;
   deliveryDate?: string;
   notes?: string;
 }
@@ -39,6 +40,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       if (existingIndex >= 0) {
         const updated = [...prev];
         updated[existingIndex].quantity += item.quantity;
+        if (item.prepDays) updated[existingIndex].prepDays = item.prepDays;
         if (item.deliveryDate) updated[existingIndex].deliveryDate = item.deliveryDate;
         if (item.notes) updated[existingIndex].notes = item.notes;
         return updated;

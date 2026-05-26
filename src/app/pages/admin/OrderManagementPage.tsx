@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { ArrowLeft, CheckCircle, Eye, Check, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { User } from '../../App';
+import { generateFinalOrderNumber } from '../../utils/business';
 
 interface OrderManagementPageProps {
   user: User;
@@ -44,9 +45,17 @@ export default function OrderManagementPage({ user }: OrderManagementPageProps) 
 
   const updateOrderStatus = (orderId: string, newStatus: string) => {
     const allOrders = JSON.parse(localStorage.getItem('orders') || '[]');
-    const updatedOrders = allOrders.map((order: any) =>
-      order.id === orderId ? { ...order, status: newStatus } : order
-    );
+    const updatedOrders = allOrders.map((order: any) => {
+      if (order.id === orderId) {
+        const updated = { ...order, status: newStatus };
+        // When admin confirms order receipt, generate finalized order number
+        if (newStatus === 'Order Received' && !updated.finalizedNumber) {
+          updated.finalizedNumber = generateFinalOrderNumber();
+        }
+        return updated;
+      }
+      return order;
+    });
     localStorage.setItem('orders', JSON.stringify(updatedOrders));
     loadOrders();
     toast.success('Order status updated!');
@@ -83,6 +92,8 @@ export default function OrderManagementPage({ user }: OrderManagementPageProps) 
     }
   };
 
+  const getOrderLabel = (order: any) => order.finalizedNumber || `Order #${order.id.slice(-6)}`;
+
   const rejectOrder = (orderId: string) => {
     const allOrders = JSON.parse(localStorage.getItem('orders') || '[]');
     const updatedOrders = allOrders.map((order: any) =>
@@ -99,9 +110,9 @@ export default function OrderManagementPage({ user }: OrderManagementPageProps) 
   return (
     <div className="min-h-screen pb-24">
       {/* Header */}
-      <div className="bg-gradient-to-r from-orange-500 to-amber-500 text-white p-6">
-        <div className="max-w-6xl mx-auto">
-          <Link to="/admin/dashboard" className="inline-flex items-center text-white hover:text-gray-100 mb-4">
+      <div className="page-hero">
+        <div className="page-hero__inner page-hero__inner--wide">
+          <Link to="/admin/dashboard" className="page-back-link">
             <ArrowLeft className="w-5 h-5 mr-2" />
             <span className="text-lg">Back to Dashboard</span>
           </Link>
@@ -151,7 +162,7 @@ export default function OrderManagementPage({ user }: OrderManagementPageProps) 
               <CardHeader className="bg-gray-50">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                   <div>
-                    <CardTitle className="text-xl">Order #{order.id.slice(-6)}</CardTitle>
+                    <CardTitle className="text-xl">{getOrderLabel(order)}</CardTitle>
                     <p className="text-sm text-gray-600 mt-1">
                       {order.customerName} • {order.customerPhone}
                     </p>
@@ -260,7 +271,7 @@ export default function OrderManagementPage({ user }: OrderManagementPageProps) 
                         <>
                           <Button
                             onClick={() => updateOrderStatus(order.id, 'Order Received')}
-                            className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600"
+                            className="success-button"
                           >
                             <Check className="w-4 h-4 mr-2" />
                             Approve Order
@@ -280,7 +291,7 @@ export default function OrderManagementPage({ user }: OrderManagementPageProps) 
                       {order.status === 'Order Received' && (
                         <Button
                           onClick={() => updateOrderStatus(order.id, 'In Preparation')}
-                          className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600"
+                          className="brand-button"
                         >
                           Start Preparation
                         </Button>
@@ -297,7 +308,7 @@ export default function OrderManagementPage({ user }: OrderManagementPageProps) 
                       {order.status === 'Ready for Pickup' && (
                         <Button
                           onClick={() => updateOrderStatus(order.id, 'Delivered')}
-                          className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600"
+                          className="success-button"
                         >
                           <CheckCircle className="w-4 h-4 mr-2" />
                           Mark as Picked Up
@@ -338,7 +349,7 @@ export default function OrderManagementPage({ user }: OrderManagementPageProps) 
       <Dialog open={selectedOrder !== null} onOpenChange={(open) => !open && setSelectedOrder(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Admin Notes for Order #{selectedOrder?.id.slice(-6)}</DialogTitle>
+            <DialogTitle>Admin Notes for {selectedOrder ? getOrderLabel(selectedOrder) : 'Order'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <Textarea
@@ -349,7 +360,7 @@ export default function OrderManagementPage({ user }: OrderManagementPageProps) 
             />
             <Button
               onClick={() => selectedOrder && saveAdminNotes(selectedOrder.id)}
-              className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600"
+              className="w-full brand-button"
             >
               Save Notes
             </Button>
@@ -361,7 +372,7 @@ export default function OrderManagementPage({ user }: OrderManagementPageProps) 
       <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Reject Order #{orderToReject?.id.slice(-6)}</DialogTitle>
+            <DialogTitle>Reject Order {orderToReject ? getOrderLabel(orderToReject) : 'Order'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-gray-600">Please provide a reason for rejecting this order:</p>

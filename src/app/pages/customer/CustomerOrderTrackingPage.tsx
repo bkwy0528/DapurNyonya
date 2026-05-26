@@ -62,12 +62,14 @@ export default function CustomerOrderTrackingPage({ user }: CustomerOrderTrackin
     }
   };
 
+  const getOrderLabel = (order: any) => order.finalizedNumber || `Order #${order.id.slice(-6)}`;
+
   return (
     <div className="min-h-screen pb-6">
       {/* Header */}
-      <div className="bg-gradient-to-r from-orange-500 to-amber-500 text-white p-6">
-        <div className="max-w-4xl mx-auto">
-          <Link to="/customer/home" className="inline-flex items-center text-white hover:text-gray-100 mb-4">
+      <div className="page-hero">
+        <div className="page-hero__inner">
+          <Link to="/customer/home" className="page-back-link">
             <ArrowLeft className="w-5 h-5 mr-2" />
             <span className="text-lg">Back to Home</span>
           </Link>
@@ -84,7 +86,7 @@ export default function CustomerOrderTrackingPage({ user }: CustomerOrderTrackin
               <h3 className="text-xl font-semibold text-gray-700 mb-2">No orders yet</h3>
               <p className="text-gray-600 mb-6">Start ordering delicious festive treats!</p>
               <Link to="/customer/home">
-                <button className="bg-gradient-to-r from-orange-500 to-amber-500 text-white px-6 py-3 rounded-lg hover:from-orange-600 hover:to-amber-600">
+                <button className="brand-button rounded-lg px-6 py-3 text-white">
                   Browse Products
                 </button>
               </Link>
@@ -98,7 +100,7 @@ export default function CustomerOrderTrackingPage({ user }: CustomerOrderTrackin
                 <Card key={order.id} className="overflow-hidden">
                   <CardHeader className="bg-gray-50">
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg">Order #{order.id.slice(-6)}</CardTitle>
+                      <CardTitle className="text-lg">{getOrderLabel(order)}</CardTitle>
                       <Badge className={getStatusColor(order.status)}>
                         {order.status}
                       </Badge>

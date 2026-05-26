@@ -93,56 +93,11 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
     }
   ];
 
-  const quickActions = [
-    {
-      title: 'View Orders',
-      description: 'Manage all customer orders',
-      icon: ShoppingCart,
-      link: '/admin/orders',
-      color: 'from-blue-500 to-blue-600'
-    },
-    {
-      title: 'Analytics & Reports',
-      description: 'View business insights and charts',
-      icon: BarChart,
-      link: '/admin/analytics',
-      color: 'from-teal-500 to-cyan-500'
-    },
-    {
-      title: 'Manage Products',
-      description: 'Add, edit, and manage products',
-      icon: UtensilsCrossed,
-      link: '/admin/products',
-      color: 'from-pink-500 to-rose-500'
-    },
-    {
-      title: 'Production Schedule',
-      description: 'Plan your production timeline',
-      icon: Calendar,
-      link: '/admin/schedule',
-      color: 'from-orange-500 to-amber-500'
-    },
-    {
-      title: 'Ingredient Planning',
-      description: 'Calculate ingredient needs',
-      icon: Package,
-      link: '/admin/ingredients',
-      color: 'from-green-500 to-emerald-500'
-    },
-    {
-      title: 'Settings',
-      description: 'Manage business settings',
-      icon: Settings,
-      link: '/admin/settings',
-      color: 'from-purple-500 to-pink-500'
-    }
-  ];
-
   return (
-    <div className="min-h-screen pb-24">
+    <div className="min-h-screen pb-12">
       {/* Header */}
-      <div className="bg-gradient-to-r from-orange-500 to-amber-500 text-white p-6 pb-8">
-        <div className="max-w-6xl mx-auto">
+      <div className="brand-gradient text-white p-6 pb-8">
+        <div className="page-hero__inner page-hero__inner--wide">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-3">
               <Link to="/admin/profile" className="w-12 h-12 bg-white bg-opacity-20 rounded-full flex items-center justify-center overflow-hidden cursor-pointer hover:bg-opacity-30 transition-all">
@@ -157,15 +112,6 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
                 <p className="text-xl">{user.name}</p>
               </div>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onLogout}
-              className="text-white hover:bg-white hover:bg-opacity-20"
-            >
-              <LogOut className="w-5 h-5 mr-2" />
-              Logout
-            </Button>
           </div>
         </div>
       </div>
@@ -192,60 +138,6 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
         </div>
       </div>
 
-      {/* Quick Actions */}
-      <div className="max-w-6xl mx-auto px-6">
-        <h2 className="text-2xl font-semibold text-gray-900 mb-6">Quick Actions</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {quickActions.map((action, index) => {
-            const Icon = action.icon;
-            return (
-              <Link key={index} to={action.link}>
-                <Card className="h-full hover:shadow-xl transition-all cursor-pointer border-2 hover:border-orange-300">
-                  <CardHeader>
-                    <div className="flex items-center space-x-4">
-                      <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${action.color} flex items-center justify-center shadow-lg`}>
-                        <Icon className="w-7 h-7 text-white" />
-                      </div>
-                      <div className="flex-1">
-                        <CardTitle className="text-xl">{action.title}</CardTitle>
-                        <p className="text-sm text-gray-600 mt-1">{action.description}</p>
-                      </div>
-                    </div>
-                  </CardHeader>
-                </Card>
-              </Link>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg">
-        <div className="max-w-6xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-around">
-            <Link to="/admin/dashboard" className="flex flex-col items-center space-y-1 text-orange-600">
-              <User className="w-6 h-6" />
-              <span className="text-xs">Dashboard</span>
-            </Link>
-            <Link to="/admin/orders" className="flex flex-col items-center space-y-1 text-gray-600 hover:text-orange-600">
-              <ShoppingCart className="w-6 h-6" />
-              <span className="text-xs">Orders</span>
-            </Link>
-            <Link to="/admin/analytics" className="flex flex-col items-center space-y-1 text-gray-600 hover:text-orange-600">
-              <BarChart className="w-6 h-6" />
-              <span className="text-xs">Analytics</span>
-            </Link>
-            <Link to="/admin/schedule" className="flex flex-col items-center space-y-1 text-gray-600 hover:text-orange-600">
-              <Calendar className="w-6 h-6" />
-              <span className="text-xs">Schedule</span>
-            </Link>
-            <Link to="/admin/settings" className="flex flex-col items-center space-y-1 text-gray-600 hover:text-orange-600">
-              <Settings className="w-6 h-6" />
-              <span className="text-xs">Settings</span>
-            </Link>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

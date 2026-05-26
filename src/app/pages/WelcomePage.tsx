@@ -41,7 +41,7 @@ export default function WelcomePage() {
         {/* Action Buttons */}
         <div className="space-y-4 pt-4">
           <Link to="/login" className="block">
-            <Button size="lg" className="w-full h-14 text-lg bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600">
+            <Button size="lg" className="w-full h-14 text-lg brand-button">
               Login
             </Button>
           </Link>

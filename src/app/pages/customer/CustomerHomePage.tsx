@@ -2,7 +2,7 @@ import { Link } from 'react-router';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
-import { User as UserIconLucide, LogOut, ShoppingCart, Package, UserCircle } from 'lucide-react';
+import { User as UserIconLucide, LogOut, Package } from 'lucide-react';
 import { User as UserType } from '../../App';
 import { useCart } from '../../context/CartContext';
 import { useState, useEffect } from 'react';
@@ -13,8 +13,6 @@ interface CustomerHomePageProps {
 }
 
 export default function CustomerHomePage({ user, onLogout }: CustomerHomePageProps) {
-  const { getCartCount } = useCart();
-  const cartCount = getCartCount();
   const [products, setProducts] = useState<any[]>([]);
 
   useEffect(() => {
@@ -29,10 +27,10 @@ export default function CustomerHomePage({ user, onLogout }: CustomerHomePagePro
   };
 
   return (
-    <div className="min-h-screen pb-24">
+    <div className="min-h-screen pb-12">
       {/* Header */}
-      <div className="bg-gradient-to-r from-orange-500 to-amber-500 text-white p-6 pb-8">
-        <div className="max-w-4xl mx-auto">
+      <div className="brand-gradient text-white p-6 pb-8">
+        <div className="page-hero__inner">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-3">
               <Link to="/customer/profile" className="w-12 h-12 bg-white bg-opacity-20 rounded-full flex items-center justify-center overflow-hidden cursor-pointer hover:bg-opacity-30 transition-all">
@@ -47,15 +45,6 @@ export default function CustomerHomePage({ user, onLogout }: CustomerHomePagePro
                 <p className="text-xl">{user.name}</p>
               </div>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onLogout}
-              className="text-white hover:bg-white hover:bg-opacity-20"
-            >
-              <LogOut className="w-5 h-5 mr-2" />
-              Logout
-            </Button>
           </div>
         </div>
       </div>
@@ -79,27 +68,9 @@ export default function CustomerHomePage({ user, onLogout }: CustomerHomePagePro
 
       {/* Products Section */}
       <div className="max-w-4xl mx-auto px-6 py-8">
-        <div className="flex items-center justify-between mb-6">
+        <div className="mb-6">
           <h2 className="text-2xl font-semibold text-gray-900">Available Products</h2>
-          <div className="flex space-x-3">
-            <Link to="/customer/cart">
-              <Button variant="outline" className="border-2 relative">
-                <ShoppingCart className="w-5 h-5 mr-2" />
-                Cart
-                {cartCount > 0 && (
-                  <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center">
-                    {cartCount}
-                  </span>
-                )}
-              </Button>
-            </Link>
-            <Link to="/customer/tracking">
-              <Button variant="outline" className="border-2">
-                <Package className="w-5 h-5 mr-2" />
-                Orders
-              </Button>
-            </Link>
-          </div>
+          <p className="text-sm text-gray-600 mt-1">Use the top navigation for cart, orders, and profile access.</p>
         </div>
 
         <div className="grid gap-6">
@@ -127,12 +98,12 @@ export default function CustomerHomePage({ user, onLogout }: CustomerHomePagePro
                     <div className="text-2xl font-bold text-orange-600">RM {product.price.toFixed(2)}</div>
                     <div className="flex flex-wrap gap-3 w-full sm:w-auto">
                       <Link to={`/customer/product/${product.id}`} className="flex-1 sm:flex-none">
-                        <Button className="w-full sm:w-auto bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600">
+                        <Button className="w-full sm:w-auto brand-button">
                           View Product
                         </Button>
                       </Link>
                       <Link to={`/customer/order/${product.id}`} className="flex-1 sm:flex-none">
-                        <Button className="w-full sm:w-auto bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600">
+                        <Button className="w-full sm:w-auto success-button">
                           Add to Cart
                         </Button>
                       </Link>
@@ -145,34 +116,6 @@ export default function CustomerHomePage({ user, onLogout }: CustomerHomePagePro
         </div>
       </div>
 
-      {/* Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg">
-        <div className="max-w-4xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-around">
-            <Link to="/customer/home" className="flex flex-col items-center space-y-1 text-orange-600">
-              <Package className="w-6 h-6" />
-              <span className="text-xs">Home</span>
-            </Link>
-            <Link to="/customer/cart" className="flex flex-col items-center space-y-1 text-gray-600 hover:text-orange-600 relative">
-              <ShoppingCart className="w-6 h-6" />
-              <span className="text-xs">Cart</span>
-              {cartCount > 0 && (
-                <span className="absolute -top-1 left-1/2 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                  {cartCount}
-                </span>
-              )}
-            </Link>
-            <Link to="/customer/tracking" className="flex flex-col items-center space-y-1 text-gray-600 hover:text-orange-600">
-              <Package className="w-6 h-6" />
-              <span className="text-xs">Orders</span>
-            </Link>
-            <Link to="/customer/profile" className="flex flex-col items-center space-y-1 text-gray-600 hover:text-orange-600">
-              <UserCircle className="w-6 h-6" />
-              <span className="text-xs">Profile</span>
-            </Link>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
