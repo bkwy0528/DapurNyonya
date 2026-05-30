@@ -22,6 +22,7 @@ interface Product {
   price: number;
   image: string;
   unit: string;
+  prepDays: number;
   available: boolean;
 }
 
@@ -37,6 +38,7 @@ export default function ProductManagementPage({ user }: ProductManagementPagePro
     price: '',
     image: '',
     unit: '',
+    prepDays: '3',
     available: true
   });
 
@@ -58,6 +60,7 @@ export default function ProductManagementPage({ user }: ProductManagementPagePro
           price: 25.00,
           image: 'https://images.unsplash.com/photo-1766309416197-5982d32f4ce0',
           unit: 'pack (12 pieces)',
+          prepDays: 3,
           available: true
         },
         {
@@ -67,6 +70,7 @@ export default function ProductManagementPage({ user }: ProductManagementPagePro
           price: 18.00,
           image: 'https://images.unsplash.com/photo-1627373369962-42fd4fde6504',
           unit: 'box (20 cookies)',
+          prepDays: 2,
           available: true
         },
         {
@@ -76,6 +80,7 @@ export default function ProductManagementPage({ user }: ProductManagementPagePro
           price: 22.00,
           image: 'https://images.unsplash.com/photo-1680345576132-9dc2b41636c3',
           unit: 'pack (500g)',
+          prepDays: 1,
           available: true
         }
       ];
@@ -103,7 +108,7 @@ export default function ProductManagementPage({ user }: ProductManagementPagePro
   };
 
   const handleSaveProduct = () => {
-    if (!formData.name || !formData.price || !formData.unit) {
+    if (!formData.name || !formData.price || !formData.unit || !formData.prepDays) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -114,11 +119,17 @@ export default function ProductManagementPage({ user }: ProductManagementPagePro
       return;
     }
 
+    const prepDays = parseInt(formData.prepDays, 10);
+    if (isNaN(prepDays) || prepDays < 1) {
+      toast.error('Preparation days must be at least 1');
+      return;
+    }
+
     if (editingProduct) {
       // Update existing product
       const updatedProducts = products.map(p =>
         p.id === editingProduct.id
-          ? { ...p, ...formData, price }
+          ? { ...p, ...formData, price, prepDays }
           : p
       );
       setProducts(updatedProducts);
@@ -129,7 +140,8 @@ export default function ProductManagementPage({ user }: ProductManagementPagePro
       const newProduct: Product = {
         id: Date.now().toString(),
         ...formData,
-        price
+        price,
+        prepDays
       };
       const updatedProducts = [...products, newProduct];
       setProducts(updatedProducts);
@@ -149,6 +161,7 @@ export default function ProductManagementPage({ user }: ProductManagementPagePro
       price: product.price.toString(),
       image: product.image,
       unit: product.unit,
+      prepDays: String(product.prepDays || 3),
       available: product.available
     });
     setImagePreview(product.image);
@@ -171,6 +184,7 @@ export default function ProductManagementPage({ user }: ProductManagementPagePro
       price: '',
       image: '',
       unit: '',
+      prepDays: '3',
       available: true
     });
     setImagePreview('');
@@ -251,6 +265,20 @@ export default function ProductManagementPage({ user }: ProductManagementPagePro
                     value={formData.unit}
                     onChange={(e) => setFormData({...formData, unit: e.target.value})}
                     placeholder="e.g., pack (12 pieces)"
+                    className="h-12"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="prepDays">Preparation Days *</Label>
+                  <Input
+                    id="prepDays"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={formData.prepDays}
+                    onChange={(e) => setFormData({...formData, prepDays: e.target.value})}
+                    placeholder="3"
                     className="h-12"
                   />
                 </div>
@@ -369,6 +397,10 @@ export default function ProductManagementPage({ user }: ProductManagementPagePro
                       <div>
                         <p className="text-sm text-gray-600">Unit</p>
                         <p className="font-semibold text-gray-900">{product.unit}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-600">Preparation</p>
+                        <p className="font-semibold text-gray-900">{product.prepDays || 3} day(s)</p>
                       </div>
                     </div>
 

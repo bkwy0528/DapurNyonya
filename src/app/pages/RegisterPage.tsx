@@ -153,7 +153,7 @@ export default function RegisterPage({ onRegister }: RegisterPageProps) {
               )}
             </CardContent>
             <CardFooter className="flex flex-col space-y-4">
-              <Button type="submit" size="lg" className="w-full text-lg brand-button">Register</Button>
+              <Button type="submit" size="lg" className="w-full text-lg bg-gradient-to-r from-orange-500 to-amber-500">Register</Button>
               <p className="text-center text-gray-600">Already have an account? <Link to="/login" className="text-orange-600 hover:text-orange-700">Login here</Link></p>
             </CardFooter>
           </form>

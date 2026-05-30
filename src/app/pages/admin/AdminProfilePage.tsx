@@ -13,9 +13,10 @@ import { User } from '../../App';
 interface AdminProfilePageProps {
   user: User;
   onLogout: () => void;
+  onProfileUpdate?: (user: User) => void;
 }
 
-export default function AdminProfilePage({ user, onLogout }: AdminProfilePageProps) {
+export default function AdminProfilePage({ user, onLogout, onProfileUpdate }: AdminProfilePageProps) {
   const [name, setName] = useState(user.name);
   const [countryCode, setCountryCode] = useState(user.phone.substring(0, 3));
   const [phone, setPhone] = useState(user.phone.substring(3));
@@ -50,6 +51,7 @@ export default function AdminProfilePage({ user, onLogout }: AdminProfilePagePro
 
   const handleSave = () => {
     const fullPhone = `${countryCode}${phone}`;
+    const updatedUser = { ...user, name, phone: fullPhone, email, profilePicture };
     
     // Save admin profile to localStorage
     const adminProfile = {
@@ -60,6 +62,7 @@ export default function AdminProfilePage({ user, onLogout }: AdminProfilePagePro
     };
     localStorage.setItem('adminProfile', JSON.stringify(adminProfile));
 
+    onProfileUpdate?.(updatedUser);
     toast.success('Profile updated successfully!');
   };
 
@@ -131,11 +134,11 @@ export default function AdminProfilePage({ user, onLogout }: AdminProfilePagePro
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="+60">🇲🇾 +60</SelectItem>
-                    <SelectItem value="+65">🇸🇬 +65</SelectItem>
-                    <SelectItem value="+62">🇮🇩 +62</SelectItem>
-                    <SelectItem value="+66">🇹🇭 +66</SelectItem>
-                    <SelectItem value="+1">🇺🇸 +1</SelectItem>
+                    <SelectItem value="+60">Malaysia +60</SelectItem>
+                    <SelectItem value="+65">Singapore +65</SelectItem>
+                    <SelectItem value="+62">Indonesia +62</SelectItem>
+                    <SelectItem value="+66">Thailand +66</SelectItem>
+                    <SelectItem value="+1">United States +1</SelectItem>
                   </SelectContent>
                 </Select>
                 <Input

@@ -105,9 +105,9 @@ export default function ProductDetailPage({ user }: ProductDetailPageProps) {
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <h4 className="font-semibold text-blue-900 mb-2">Order Information</h4>
               <ul className="text-sm text-blue-800 space-y-1">
-                <li>• Minimum 3-5 days advance notice required</li>
-                <li>• Made fresh to order</li>
-                <li>• Pickup or delivery available</li>
+                <li>- Minimum 3-5 days advance notice required</li>
+                <li>- Made fresh to order</li>
+                <li>- Pickup or delivery available</li>
               </ul>
             </div>
 
@@ -124,6 +124,7 @@ export default function ProductDetailPage({ user }: ProductDetailPageProps) {
                       quantity: 1,
                       image: product.image,
                       unit: product.unit,
+                      prepDays: product.prepDays,
                     });
                     toast.success('Added to cart!');
                   }}

@@ -86,7 +86,7 @@ export default function ForgotPasswordPage() {
                 </div>
                 {errors.length > 0 && (
                   <div className="text-sm text-red-600">
-                    {errors.map((err, i) => <div key={i}>• {err}</div>)}
+                    {errors.map((err, i) => <div key={i}>- {err}</div>)}
                   </div>
                 )}
               </CardContent>

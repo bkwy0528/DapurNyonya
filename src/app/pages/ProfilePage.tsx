@@ -13,9 +13,10 @@ import { User } from '../App';
 interface ProfilePageProps {
   user: User;
   onLogout: () => void;
+  onProfileUpdate?: (user: User) => void;
 }
 
-export default function ProfilePage({ user, onLogout }: ProfilePageProps) {
+export default function ProfilePage({ user, onLogout, onProfileUpdate }: ProfilePageProps) {
   const [name, setName] = useState(user.name);
   const [countryCode, setCountryCode] = useState(user.phone.substring(0, 3));
   const [phone, setPhone] = useState(user.phone.substring(3));
@@ -37,6 +38,7 @@ export default function ProfilePage({ user, onLogout }: ProfilePageProps) {
 
   const handleSave = () => {
     const fullPhone = `${countryCode}${phone}`;
+    const updatedUser = { ...user, name, phone: fullPhone, email, address, notes, profilePicture };
     
     // Update user in localStorage
     if (user.role === 'customer') {
@@ -49,6 +51,7 @@ export default function ProfilePage({ user, onLogout }: ProfilePageProps) {
       localStorage.setItem('users', JSON.stringify(updatedUsers));
     }
 
+    onProfileUpdate?.(updatedUser);
     toast.success('Profile updated successfully!');
   };
 
@@ -122,11 +125,11 @@ export default function ProfilePage({ user, onLogout }: ProfilePageProps) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="+60">🇲🇾 +60</SelectItem>
-                    <SelectItem value="+65">🇸🇬 +65</SelectItem>
-                    <SelectItem value="+62">🇮🇩 +62</SelectItem>
-                    <SelectItem value="+66">🇹🇭 +66</SelectItem>
-                    <SelectItem value="+1">🇺🇸 +1</SelectItem>
+                    <SelectItem value="+60">Malaysia +60</SelectItem>
+                    <SelectItem value="+65">Singapore +65</SelectItem>
+                    <SelectItem value="+62">Indonesia +62</SelectItem>
+                    <SelectItem value="+66">Thailand +66</SelectItem>
+                    <SelectItem value="+1">United States +1</SelectItem>
                   </SelectContent>
                 </Select>
                 <Input

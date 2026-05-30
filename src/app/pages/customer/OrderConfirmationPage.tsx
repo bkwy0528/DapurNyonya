@@ -61,7 +61,7 @@ export default function OrderConfirmationPage({ user }: any) {
               <p className="text-sm text-gray-600">Items</p>
               {pendingOrder.items.map((it: any, idx: number) => (
                 <div key={idx} className="flex items-center justify-between">
-                  <span>{it.name} × {it.quantity}</span>
+                  <span>{it.name} x {it.quantity}</span>
                   <span>RM {(it.price * it.quantity).toFixed(2)}</span>
                 </div>
               ))}

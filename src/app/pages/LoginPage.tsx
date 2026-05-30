@@ -105,7 +105,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             </FormSection>
           </CardContent>
             <CardFooter className="flex flex-col gap-3">
-            <Button type="submit" size="lg" className="w-full text-lg brand-button">Login</Button>
+            <Button type="submit" size="lg" className="w-full text-lg bg-gradient-to-r from-orange-500 to-amber-500">Login</Button>
             <div className="w-full space-y-2 text-sm text-gray-600">
               <p>
                 Don&apos;t have an account?{' '}

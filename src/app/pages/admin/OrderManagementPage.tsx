@@ -164,7 +164,7 @@ export default function OrderManagementPage({ user }: OrderManagementPageProps) 
                   <div>
                     <CardTitle className="text-xl">{getOrderLabel(order)}</CardTitle>
                     <p className="text-sm text-gray-600 mt-1">
-                      {order.customerName} • {order.customerPhone}
+                      {order.customerName} - {order.customerPhone}
                     </p>
                     <p className="text-sm text-gray-600">
                       Order Date: {new Date(order.orderDate || Date.now()).toLocaleDateString('en-US', {

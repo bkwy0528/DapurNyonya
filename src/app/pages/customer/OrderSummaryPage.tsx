@@ -141,9 +141,9 @@ export default function OrderSummaryPage({ user }: OrderSummaryPageProps) {
             <div className="space-y-2">
               <Label className="text-base">Payment Methods:</Label>
               <div className="space-y-2 text-gray-700">
-                <p>• Bank Transfer: Account 1234-5678-9012</p>
-                <p>• E-Wallet: +1 (555) 123-4567</p>
-                <p>• Cash on Delivery (Available)</p>
+                <p>- Bank Transfer: Account 1234-5678-9012</p>
+                <p>- E-Wallet: +60 12-345 6789</p>
+                <p>- Cash on Delivery (Available)</p>
               </div>
             </div>
 

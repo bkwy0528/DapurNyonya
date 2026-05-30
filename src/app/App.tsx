@@ -104,6 +104,15 @@ function App() {
     } catch (e) {}
   };
 
+  const handleProfileUpdate = (updatedUser: User) => {
+    setUser(updatedUser);
+    try {
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+    } catch (e) {
+      // ignore
+    }
+  };
+
   return (
     <CartProvider>
       <BrowserRouter>
@@ -130,7 +139,7 @@ function App() {
                     <Route path="order-confirmation" element={<OrderConfirmationPage user={user} />} />
                     <Route path="order-summary" element={<OrderSummaryPage user={user} />} />
                     <Route path="tracking" element={<CustomerOrderTrackingPage user={user} />} />
-                    <Route path="profile" element={<ProfilePage user={user} onLogout={handleLogout} />} />
+                    <Route path="profile" element={<ProfilePage user={user} onLogout={handleLogout} onProfileUpdate={handleProfileUpdate} />} />
                   </Routes>
                 ) : (
                   <Navigate to="/login" replace />
@@ -151,7 +160,7 @@ function App() {
                     <Route path="settings" element={<AdminSettingsPage user={user} />} />
                     <Route path="products" element={<ProductManagementPage user={user} />} />
                     <Route path="analytics" element={<AnalyticsDashboard user={user} />} />
-                    <Route path="profile" element={<AdminProfilePage user={user} onLogout={handleLogout} />} />
+                    <Route path="profile" element={<AdminProfilePage user={user} onLogout={handleLogout} onProfileUpdate={handleProfileUpdate} />} />
                   </Routes>
                 ) : (
                   <Navigate to="/login" replace />

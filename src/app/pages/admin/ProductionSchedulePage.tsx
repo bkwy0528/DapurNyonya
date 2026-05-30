@@ -254,7 +254,7 @@ export default function ProductionSchedulePage({ user }: ProductionSchedulePageP
                             <div className="space-y-2">
                               {order.items && order.items.map((item: any, index: number) => (
                                 <div key={index} className="flex items-center justify-between rounded bg-white p-2 text-sm">
-                                  <span className="text-gray-700">{item.name} × {item.quantity}</span>
+                                  <span className="text-gray-700">{item.name} x {item.quantity}</span>
                                   <span className="font-semibold text-orange-600">RM {(item.price * item.quantity).toFixed(2)}</span>
                                 </div>
                               ))}

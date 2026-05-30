@@ -65,8 +65,8 @@ export default function ProductOrderPage({ user }: ProductOrderPageProps) {
   return (
     <PageContainer>
       {/* Header */}
-      <div className="page-hero page-hero--rounded">
-        <Link to="/customer/home" className="page-back-link mb-2">
+      <div className="bg-gradient-to-r from-orange-500 to-amber-500 text-white p-6 rounded-b-xl">
+        <Link to="/customer/home" className="inline-flex items-center text-white hover:text-gray-100 mb-2">
           <ArrowLeft className="w-5 h-5 mr-2" />
           <span className="text-lg">Back to Products</span>
         </Link>
@@ -125,7 +125,7 @@ export default function ProductOrderPage({ user }: ProductOrderPageProps) {
                 <span className="text-lg font-semibold text-gray-900">Total Amount</span>
                 <span className="text-3xl font-bold text-orange-600">RM {totalPrice.toFixed(2)}</span>
               </div>
-              <Button size="lg" onClick={handleAddToCart} className="w-full text-lg success-button"><ShoppingCart className="w-5 h-5 mr-2" />Add to Cart</Button>
+              <Button size="lg" onClick={handleAddToCart} className="w-full text-lg bg-gradient-to-r from-green-500 to-emerald-500"><ShoppingCart className="w-5 h-5 mr-2" />Add to Cart</Button>
             </div>
           </CardContent>
         </Card>
