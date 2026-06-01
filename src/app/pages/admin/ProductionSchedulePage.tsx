@@ -7,6 +7,7 @@ import { Button } from '../../components/ui/button';
 import { Calendar as CalendarIcon, ArrowLeft, Clock, ChefHat, Package, AlertCircle } from 'lucide-react';
 import { User } from '../../App';
 import { Calendar } from '../../components/ui/calendar';
+import { safeGetJSON } from '../../utils/storage';
 
 interface ProductionSchedulePageProps {
   user: User;
@@ -38,7 +39,7 @@ export default function ProductionSchedulePage({ user }: ProductionSchedulePageP
   const getOrderLabel = (order: any) => order.finalizedNumber || `Order #${order.id.slice(-6)}`;
 
   const getOrderCountForDate = (dateKey: string) => {
-    const orders = JSON.parse(localStorage.getItem('orders') || '[]');
+    const orders = safeGetJSON('orders', []);
     return orders.filter((order: any) => order.deliveryDate === dateKey && order.status !== 'Rejected').length;
   };
 
@@ -79,7 +80,7 @@ export default function ProductionSchedulePage({ user }: ProductionSchedulePageP
       });
 
     setGroupedOrders(grouped);
-    setDailyLimits(JSON.parse(localStorage.getItem('dailyLimits') || '{}'));
+    setDailyLimits(safeGetJSON('dailyLimits', {}));
   };
 
   useEffect(() => {

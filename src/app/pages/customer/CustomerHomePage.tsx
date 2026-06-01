@@ -6,6 +6,7 @@ import { User as UserIconLucide, LogOut, Package } from 'lucide-react';
 import { User as UserType } from '../../App';
 import { useCart } from '../../context/CartContext';
 import { useState, useEffect } from 'react';
+import { safeGetJSON } from '../../utils/storage';
 
 interface CustomerHomePageProps {
   user: UserType;
@@ -20,10 +21,8 @@ export default function CustomerHomePage({ user, onLogout }: CustomerHomePagePro
   }, []);
 
   const loadProducts = () => {
-    const storedProducts = localStorage.getItem('products');
-    if (storedProducts) {
-      setProducts(JSON.parse(storedProducts).filter((p: any) => p.available));
-    }
+    const products = safeGetJSON('products', []);
+    setProducts(products.filter((p: any) => p.available));
   };
 
   return (

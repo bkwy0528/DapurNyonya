@@ -7,6 +7,7 @@ import { User } from '../../App';
 import { useCart } from '../../context/CartContext';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router';
+import { safeGetJSON } from '../../utils/storage';
 
 interface ProductDetailPageProps {
   user: User;
@@ -18,7 +19,7 @@ export default function ProductDetailPage({ user }: ProductDetailPageProps) {
   const navigate = useNavigate();
   
   // Load products from localStorage
-  const storedProducts = JSON.parse(localStorage.getItem('products') || '[]');
+  const storedProducts = safeGetJSON('products', []);
   const product = storedProducts.find((p: any) => p.id === productId);
 
   if (!product) {

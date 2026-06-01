@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { ArrowLeft, TrendingUp, DollarSign, ShoppingBag, Users, Calendar } from 'lucide-react';
 import { User } from '../../App';
+import { safeGetJSON } from '../../utils/storage';
 import {
   AreaChart,
   Area,
@@ -55,8 +56,8 @@ export default function AnalyticsDashboard({ user }: AnalyticsDashboardProps) {
   }, []);
 
   const calculateAnalytics = () => {
-    const orders = JSON.parse(localStorage.getItem('orders') || '[]');
-    const products = JSON.parse(localStorage.getItem('products') || '[]');
+    const orders = safeGetJSON('orders', []);
+    const products = safeGetJSON('products', []);
 
     // Calculate total revenue and orders
     const totalRevenue = orders.reduce((sum: number, order: any) => sum + (order.total || 0), 0);

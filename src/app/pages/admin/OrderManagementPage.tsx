@@ -10,6 +10,7 @@ import { ArrowLeft, CheckCircle, Eye, Check, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { User } from '../../App';
 import { generateFinalOrderNumber } from '../../utils/business';
+import { safeGetJSON } from '../../utils/storage';
 
 interface OrderManagementPageProps {
   user: User;
@@ -38,13 +39,14 @@ export default function OrderManagementPage({ user }: OrderManagementPageProps) 
   }, [statusFilter, orders]);
 
   const loadOrders = () => {
-    const allOrders = JSON.parse(localStorage.getItem('orders') || '[]');
-    setOrders(allOrders.reverse());
-    setFilteredOrders(allOrders);
+    const allOrders = safeGetJSON('orders', []);
+    const reversed = Array.isArray(allOrders) ? [...allOrders].reverse() : [];
+    setOrders(reversed);
+    setFilteredOrders(reversed);
   };
 
   const updateOrderStatus = (orderId: string, newStatus: string) => {
-    const allOrders = JSON.parse(localStorage.getItem('orders') || '[]');
+    const allOrders = safeGetJSON('orders', []);
     const updatedOrders = allOrders.map((order: any) => {
       if (order.id === orderId) {
         const updated = { ...order, status: newStatus };
@@ -62,7 +64,7 @@ export default function OrderManagementPage({ user }: OrderManagementPageProps) 
   };
 
   const saveAdminNotes = (orderId: string) => {
-    const allOrders = JSON.parse(localStorage.getItem('orders') || '[]');
+    const allOrders = safeGetJSON('orders', []);
     const updatedOrders = allOrders.map((order: any) =>
       order.id === orderId ? { ...order, adminNotes } : order
     );
@@ -95,7 +97,7 @@ export default function OrderManagementPage({ user }: OrderManagementPageProps) 
   const getOrderLabel = (order: any) => order.finalizedNumber || `Order #${order.id.slice(-6)}`;
 
   const rejectOrder = (orderId: string) => {
-    const allOrders = JSON.parse(localStorage.getItem('orders') || '[]');
+    const allOrders = safeGetJSON('orders', []);
     const updatedOrders = allOrders.map((order: any) =>
       order.id === orderId ? { ...order, status: 'Rejected', rejectReason } : order
     );

@@ -5,6 +5,7 @@ import { Badge } from '../../components/ui/badge';
 import { Progress } from '../../components/ui/progress';
 import { ArrowLeft, Package, Clock, CheckCircle2, Truck, AlertCircle } from 'lucide-react';
 import { User } from '../../App';
+import { safeGetJSON } from '../../utils/storage';
 
 interface CustomerOrderTrackingPageProps {
   user: User;
@@ -21,9 +22,9 @@ export default function CustomerOrderTrackingPage({ user }: CustomerOrderTrackin
 
   useEffect(() => {
     // Load orders from localStorage
-    const allOrders = JSON.parse(localStorage.getItem('orders') || '[]');
+    const allOrders = safeGetJSON('orders', []);
     const userOrders = allOrders.filter((order: any) => order.customerId === user.id);
-    setOrders(userOrders.reverse());
+    setOrders(Array.isArray(userOrders) ? [...userOrders].reverse() : []);
   }, [user.id]);
 
   const getStatusProgress = (status: string) => {

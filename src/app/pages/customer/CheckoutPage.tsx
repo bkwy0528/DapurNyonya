@@ -13,6 +13,7 @@ import { User } from '../../App';
 import { toast } from 'sonner';
 import PageContainer from '../../components/ui/PageContainer';
 import FormSection from '../../components/ui/FormSection';
+import { safeGetJSON } from '../../utils/storage';
 
 interface CheckoutPageProps {
   user: User;
@@ -39,12 +40,12 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
   });
 
   const getOrderCountForDate = (date: string) => {
-    const orders = JSON.parse(localStorage.getItem('orders') || '[]');
+    const orders = safeGetJSON('orders', []);
     return orders.filter((o: any) => o.deliveryDate === date && o.status !== 'Rejected').length;
   };
 
   const getLimitForDate = (date: string) => {
-    const limits = JSON.parse(localStorage.getItem('dailyLimits') || '{}');
+    const limits = safeGetJSON('dailyLimits', {});
     return limits[date] || 0;
   };
 

@@ -59,10 +59,10 @@ export default function OrderConfirmationPage({ user }: any) {
 
             <div className="space-y-2">
               <p className="text-sm text-gray-600">Items</p>
-              {pendingOrder.items.map((it: any, idx: number) => (
+              {(pendingOrder.items || []).map((it: any, idx: number) => (
                 <div key={idx} className="flex items-center justify-between">
                   <span>{it.name} x {it.quantity}</span>
-                  <span>RM {(it.price * it.quantity).toFixed(2)}</span>
+                  <span>RM {((it.price || 0) * (it.quantity || 0)).toFixed(2)}</span>
                 </div>
               ))}
             </div>
@@ -70,7 +70,7 @@ export default function OrderConfirmationPage({ user }: any) {
             <div className="pt-4 border-t">
               <div className="flex items-center justify-between">
                 <span className="text-gray-700">Total</span>
-                <span className="font-bold text-orange-600">RM {pendingOrder.total.toFixed(2)}</span>
+                <span className="font-bold text-orange-600">RM {((pendingOrder.total || 0)).toFixed(2)}</span>
               </div>
             </div>
 

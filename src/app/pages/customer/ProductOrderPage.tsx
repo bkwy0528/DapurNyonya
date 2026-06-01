@@ -11,6 +11,7 @@ import { User } from '../../App';
 import { useCart } from '../../context/CartContext';
 import PageContainer from '../../components/ui/PageContainer';
 import FormSection from '../../components/ui/FormSection';
+import { safeGetJSON } from '../../utils/storage';
 
 interface ProductOrderPageProps {
   user: User;
@@ -27,12 +28,9 @@ export default function ProductOrderPage({ user }: ProductOrderPageProps) {
 
   useEffect(() => {
     if (productId) {
-      const storedProducts = localStorage.getItem('products');
-      if (storedProducts) {
-        const products = JSON.parse(storedProducts);
-        const foundProduct = products.find((p: any) => p.id === productId);
-        setProduct(foundProduct);
-      }
+      const products = safeGetJSON('products', []);
+      const foundProduct = products.find((p: any) => p.id === productId);
+      setProduct(foundProduct);
     }
   }, [productId]);
 
