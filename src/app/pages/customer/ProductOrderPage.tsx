@@ -2,67 +2,56 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
-import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
-import { ArrowLeft, Minus, Plus, Calendar, ShoppingCart } from 'lucide-react';
+import { ArrowLeft, Minus, Plus, ShoppingCart } from 'lucide-react';
 import { toast } from 'sonner';
 import { User } from '../../App';
 import { useCart } from '../../context/CartContext';
 import PageContainer from '../../components/ui/PageContainer';
 import FormSection from '../../components/ui/FormSection';
-import { safeGetJSON } from '../../utils/storage';
+import { getProducts } from '../../utils/db';
 
 interface ProductOrderPageProps {
   user: User;
 }
 
-export default function ProductOrderPage({ user }: ProductOrderPageProps) {
+export default function ProductOrderPage({ user: _user }: ProductOrderPageProps) {
   const navigate = useNavigate();
   const { productId } = useParams();
   const { addToCart } = useCart();
   const [product, setProduct] = useState<any>(null);
-
   const [quantity, setQuantity] = useState(1);
   const [notes, setNotes] = useState('');
 
   useEffect(() => {
     if (productId) {
-      const products = safeGetJSON('products', []);
-      const foundProduct = products.find((p: any) => p.id === productId);
-      setProduct(foundProduct);
+      getProducts().then(products => {
+        setProduct(products.find((p: any) => p.id === productId) || null);
+      });
     }
   }, [productId]);
 
   if (!product) {
-    return <div>Product not found</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-10 h-10 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
   }
 
-  const handleQuantityChange = (delta: number) => {
-    setQuantity(Math.max(1, quantity + delta));
-  };
+  const handleQuantityChange = (delta: number) => setQuantity(Math.max(1, quantity + delta));
 
   const totalPrice = product.price * quantity;
 
   const handleAddToCart = () => {
-    addToCart({
-      productId: product.id,
-      name: product.name,
-      price: product.price,
-      quantity,
-      image: product.image,
-      unit: product.unit,
-      prepDays: product.prepDays,
-      notes,
-    });
-    
+    addToCart({ productId: product.id, name: product.name, price: product.price, quantity, image: product.image, unit: product.unit, prepDays: product.prepDays, notes });
     toast.success('Added to cart!');
     navigate('/customer/cart');
   };
 
   return (
     <PageContainer>
-      {/* Header */}
       <div className="bg-gradient-to-r from-orange-500 to-amber-500 text-white p-6 rounded-b-xl">
         <Link to="/customer/home" className="inline-flex items-center text-white hover:text-gray-100 mb-2">
           <ArrowLeft className="w-5 h-5 mr-2" />
@@ -71,9 +60,7 @@ export default function ProductOrderPage({ user }: ProductOrderPageProps) {
         <h1 className="text-2xl">Add to Cart</h1>
       </div>
 
-      {/* Content */}
       <div className="px-0 py-8 space-y-6">
-        {/* Product Display */}
         <Card className="overflow-hidden">
           <div className="aspect-video w-full overflow-hidden">
             <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
@@ -90,7 +77,6 @@ export default function ProductOrderPage({ user }: ProductOrderPageProps) {
           </CardContent>
         </Card>
 
-        {/* Order Form */}
         <Card>
           <CardContent className="p-6 space-y-6">
             <FormSection>
@@ -114,16 +100,14 @@ export default function ProductOrderPage({ user }: ProductOrderPageProps) {
               <p className="text-sm text-blue-900"><strong>Note:</strong> You can select your preferred pickup/delivery date during checkout.</p>
             </div>
 
-              <div className="pt-4 border-t border-gray-200">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-gray-600">Subtotal</span>
-                <span className="text-lg">RM {totalPrice.toFixed(2)}</span>
-              </div>
+            <div className="pt-4 border-t border-gray-200">
               <div className="flex items-center justify-between mb-4">
                 <span className="text-lg font-semibold text-gray-900">Total Amount</span>
                 <span className="text-3xl font-bold text-orange-600">RM {totalPrice.toFixed(2)}</span>
               </div>
-              <Button size="lg" onClick={handleAddToCart} className="w-full text-lg bg-gradient-to-r from-green-500 to-emerald-500"><ShoppingCart className="w-5 h-5 mr-2" />Add to Cart</Button>
+              <Button size="lg" onClick={handleAddToCart} className="w-full text-lg bg-gradient-to-r from-green-500 to-emerald-500">
+                <ShoppingCart className="w-5 h-5 mr-2" />Add to Cart
+              </Button>
             </div>
           </CardContent>
         </Card>

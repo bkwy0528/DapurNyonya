@@ -13,7 +13,7 @@ import { User } from '../../App';
 import { toast } from 'sonner';
 import PageContainer from '../../components/ui/PageContainer';
 import FormSection from '../../components/ui/FormSection';
-import { safeGetJSON } from '../../utils/storage';
+import { getDailyLimits, getOrderCountForDate } from '../../utils/db';
 
 interface CheckoutPageProps {
   user: User;
@@ -21,7 +21,7 @@ interface CheckoutPageProps {
 
 export default function CheckoutPage({ user }: CheckoutPageProps) {
   const navigate = useNavigate();
-  const { cartItems, getCartTotal, clearCart } = useCart();
+  const { cartItems, getCartTotal } = useCart();
   const [deliveryMethod, setDeliveryMethod] = useState<'pickup' | 'delivery'>('pickup');
   const [deliveryAddress, setDeliveryAddress] = useState(user.address || '');
   const [postalCode, setPostalCode] = useState('');
@@ -30,8 +30,8 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
   const [deliveryDate, setDeliveryDate] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'ewallet' | 'debit' | ''>('');
   const [paymentNote, setPaymentNote] = useState('');
+  const [dateCapacity, setDateCapacity] = useState<{ count: number; limit: number } | null>(null);
 
-  // Compute minimum date based on preparation time of items in cart
   const [minDate] = useState(() => {
     const maxPrep = getMaxPrepDaysFromCart(cartItems);
     const min = new Date();
@@ -39,84 +39,58 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
     return min.toISOString().split('T')[0];
   });
 
-  const getOrderCountForDate = (date: string) => {
-    const orders = safeGetJSON('orders', []);
-    return orders.filter((o: any) => o.deliveryDate === date && o.status !== 'Rejected').length;
-  };
+  useEffect(() => {
+    if (cartItems.length === 0) navigate('/customer/cart');
+  }, [cartItems.length, navigate]);
 
-  const getLimitForDate = (date: string) => {
-    const limits = safeGetJSON('dailyLimits', {});
-    return limits[date] || 0;
-  };
+  useEffect(() => {
+    if (!deliveryDate) { setDateCapacity(null); return; }
+    Promise.all([getOrderCountForDate(deliveryDate), getDailyLimits()]).then(([count, limits]) => {
+      setDateCapacity({ count, limit: limits[deliveryDate] ?? 0 });
+    });
+  }, [deliveryDate]);
 
-  // Delivery charge calculation based on postal code (simplified)
   const calculateDeliveryCharge = (): number => {
     if (deliveryMethod === 'pickup') return 0;
-    
     if (!postalCode) return 0;
-    
-    // Simplified distance-based pricing for Malaysia
-    const firstDigit = parseInt(postalCode.charAt(0));
-    
-    // Pricing tiers based on postal code ranges
-    if (firstDigit >= 5 && firstDigit <= 6) {
-      // Kuala Lumpur / Selangor area - closer
-      return 5.00;
-    } else if (firstDigit >= 1 && firstDigit <= 4) {
-      // Northern states - medium distance
-      return 8.00;
-    } else if (firstDigit >= 7 && firstDigit <= 9) {
-      // Southern and Eastern states - farther
-      return 12.00;
-    }
-    
-    return 10.00; // Default delivery charge
+    const first = parseInt(postalCode.charAt(0));
+    if (first >= 5 && first <= 6) return 5.00;
+    if (first >= 1 && first <= 4) return 8.00;
+    if (first >= 7 && first <= 9) return 12.00;
+    return 10.00;
   };
 
   const subtotal = getCartTotal();
   const deliveryCharge = calculateDeliveryCharge();
   const total = subtotal + deliveryCharge;
 
-  useEffect(() => {
-    if (cartItems.length === 0) {
-      navigate('/customer/cart');
-    }
-  }, [cartItems.length, navigate]);
-
-  const handlePlaceOrder = () => {
+  const handlePlaceOrder = async () => {
     if (!deliveryDate) {
       toast.error('Please select a pickup/delivery date');
       return;
     }
-
-    if (deliveryMethod === 'delivery') {
-      if (!deliveryAddress || !postalCode) {
-        toast.error('Please fill in delivery address and postal code');
-        return;
-      }
+    if (deliveryMethod === 'delivery' && (!deliveryAddress || !postalCode)) {
+      toast.error('Please fill in delivery address and postal code');
+      return;
     }
-
     if (!contactPhone) {
       toast.error('Please provide a contact phone number');
       return;
     }
-
     if (!paymentMethod) {
       toast.error('Please select a payment method');
       return;
     }
 
-    // Check capacity
-    const limit = getLimitForDate(deliveryDate);
-    const currentCount = getOrderCountForDate(deliveryDate);
-    if (limit > 0 && currentCount >= limit) {
+    // Re-check capacity before proceeding
+    const [count, limits] = await Promise.all([getOrderCountForDate(deliveryDate), getDailyLimits()]);
+    const limit = limits[deliveryDate] ?? 0;
+    if (limit > 0 && count >= limit) {
       toast.error('Selected date is fully booked. Please choose another date');
       return;
     }
 
-    // Build pending order object and pass to confirmation step
     const pendingOrder = {
-      id: Date.now().toString(),
       customerId: user.id,
       customerName: user.name,
       customerPhone: contactPhone,
@@ -130,24 +104,20 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
       specialInstructions,
       paymentMethod,
       paymentNote,
-      status: paymentMethod === 'cash' ? 'Pending Confirmation' : 'Pending Payment',
+      status: 'Pending Approval',
       orderDate: new Date().toISOString(),
       deliveryDate,
       finalizedNumber: null,
     };
 
-    // Store pending order temporarily in sessionStorage for confirmation page
     sessionStorage.setItem('pendingOrder', JSON.stringify(pendingOrder));
     navigate('/customer/order-confirmation');
   };
 
-  if (cartItems.length === 0) {
-    return null;
-  }
+  if (cartItems.length === 0) return null;
 
   return (
     <PageContainer>
-      {/* Header */}
       <div className="bg-gradient-to-r from-orange-500 to-amber-500 text-white p-6 rounded-b-xl">
         <Link to="/customer/cart" className="inline-flex items-center text-white hover:text-gray-100 mb-2">
           <ArrowLeft className="w-5 h-5 mr-2" />
@@ -157,7 +127,6 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
       </div>
 
       <div className="px-0 py-8 space-y-6">
-        {/* Delivery Date */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl">
@@ -170,22 +139,15 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
               <Label htmlFor="deliveryDate" className="text-base">Select Date *</Label>
               <Input id="deliveryDate" type="date" value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} min={minDate} className="text-base" />
               <p className="text-sm text-gray-600">Orders require minimum 3-5 days advance notice</p>
-              {deliveryDate && (() => {
-                const limit = getLimitForDate(deliveryDate);
-                const count = getOrderCountForDate(deliveryDate);
-                if (limit > 0) {
-                  if (count >= limit) {
-                    return <p className="text-sm text-red-600">Selected date is fully booked. Please choose another date.</p>;
-                  }
-                  return <p className="text-sm text-green-700">Available slots: {Math.max(0, limit - count)} of {limit} remaining</p>;
-                }
-                return null;
-              })()}
+              {dateCapacity && dateCapacity.limit > 0 && (
+                dateCapacity.count >= dateCapacity.limit
+                  ? <p className="text-sm text-red-600">Selected date is fully booked. Please choose another date.</p>
+                  : <p className="text-sm text-green-700">Available slots: {Math.max(0, dateCapacity.limit - dateCapacity.count)} of {dateCapacity.limit} remaining</p>
+              )}
             </FormSection>
           </CardContent>
         </Card>
 
-        {/* Delivery Method */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl">
@@ -194,38 +156,23 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <RadioGroup 
-              value={deliveryMethod} 
-              onValueChange={(value) => setDeliveryMethod(value as 'pickup' | 'delivery')}
-            >
-              <div 
-                className={`flex items-start space-x-3 p-4 border-2 rounded-lg cursor-pointer transition-colors ${
-                  deliveryMethod === 'pickup' ? 'border-orange-500 bg-orange-50' : 'border-gray-200 hover:border-orange-300'
-                }`}
-                onClick={() => setDeliveryMethod('pickup')}
-              >
+            <RadioGroup value={deliveryMethod} onValueChange={(v) => setDeliveryMethod(v as 'pickup' | 'delivery')}>
+              <div className={`flex items-start space-x-3 p-4 border-2 rounded-lg cursor-pointer transition-colors ${deliveryMethod === 'pickup' ? 'border-orange-500 bg-orange-50' : 'border-gray-200 hover:border-orange-300'}`} onClick={() => setDeliveryMethod('pickup')}>
                 <RadioGroupItem value="pickup" id="pickup" className="mt-1" />
                 <div className="flex-1">
                   <Label htmlFor="pickup" className="text-lg cursor-pointer flex items-center gap-2">
-                    <HomeIcon className="w-5 h-5" />
-                    Pickup
+                    <HomeIcon className="w-5 h-5" />Pickup
                   </Label>
                   <p className="text-sm text-gray-600 mt-1">Pick up your order from our location (Free)</p>
                 </div>
                 <span className="text-lg font-bold text-green-600">FREE</span>
               </div>
 
-              <div 
-                className={`flex items-start space-x-3 p-4 border-2 rounded-lg cursor-pointer transition-colors ${
-                  deliveryMethod === 'delivery' ? 'border-orange-500 bg-orange-50' : 'border-gray-200 hover:border-orange-300'
-                }`}
-                onClick={() => setDeliveryMethod('delivery')}
-              >
+              <div className={`flex items-start space-x-3 p-4 border-2 rounded-lg cursor-pointer transition-colors ${deliveryMethod === 'delivery' ? 'border-orange-500 bg-orange-50' : 'border-gray-200 hover:border-orange-300'}`} onClick={() => setDeliveryMethod('delivery')}>
                 <RadioGroupItem value="delivery" id="delivery" className="mt-1" />
                 <div className="flex-1">
                   <Label htmlFor="delivery" className="text-lg cursor-pointer flex items-center gap-2">
-                    <Truck className="w-5 h-5" />
-                    Delivery
+                    <Truck className="w-5 h-5" />Delivery
                   </Label>
                   <p className="text-sm text-gray-600 mt-1">Get your order delivered to your doorstep</p>
                 </div>
@@ -239,32 +186,16 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
               <div className="space-y-4 pt-4 border-t">
                 <div className="space-y-2">
                   <Label htmlFor="address" className="text-base">Delivery Address *</Label>
-                  <Textarea
-                    id="address"
-                    value={deliveryAddress}
-                    onChange={(e) => setDeliveryAddress(e.target.value)}
-                    placeholder="Enter your complete delivery address"
-                    className="min-h-24 text-base"
-                  />
+                  <Textarea id="address" value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)} placeholder="Enter your complete delivery address" className="min-h-24 text-base" />
                 </div>
-
                 <div className="space-y-2">
                   <Label htmlFor="postalCode" className="text-base">Postal Code *</Label>
                   <div className="relative">
                     <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <Input
-                      id="postalCode"
-                      value={postalCode}
-                      onChange={(e) => setPostalCode(e.target.value)}
-                      placeholder="e.g., 50470"
-                      className="pl-12 text-base"
-                      maxLength={5}
-                    />
+                    <Input id="postalCode" value={postalCode} onChange={(e) => setPostalCode(e.target.value)} placeholder="e.g., 50470" className="pl-12 text-base" maxLength={5} />
                   </div>
                   {postalCode && deliveryCharge > 0 && (
-                    <p className="text-sm text-green-600">
-                      ✓ Delivery charge calculated: RM {deliveryCharge.toFixed(2)}
-                    </p>
+                    <p className="text-sm text-green-600">✓ Delivery charge calculated: RM {deliveryCharge.toFixed(2)}</p>
                   )}
                 </div>
               </div>
@@ -272,7 +203,6 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
           </CardContent>
         </Card>
 
-        {/* Contact Information */}
         <Card>
           <CardHeader>
             <CardTitle className="text-xl">Contact Information</CardTitle>
@@ -280,29 +210,15 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="phone" className="text-base">Contact Phone *</Label>
-              <Input
-                id="phone"
-                value={contactPhone}
-                onChange={(e) => setContactPhone(e.target.value)}
-                placeholder="+60 12-345 6789"
-                className="h-12 text-base"
-              />
+              <Input id="phone" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="+60 12-345 6789" className="h-12 text-base" />
             </div>
-
             <div className="space-y-2">
               <Label htmlFor="instructions" className="text-base">Special Instructions (Optional)</Label>
-              <Textarea
-                id="instructions"
-                value={specialInstructions}
-                onChange={(e) => setSpecialInstructions(e.target.value)}
-                placeholder="Any special delivery or preparation instructions?"
-                className="min-h-24 text-base"
-              />
+              <Textarea id="instructions" value={specialInstructions} onChange={(e) => setSpecialInstructions(e.target.value)} placeholder="Any special delivery or preparation instructions?" className="min-h-24 text-base" />
             </div>
           </CardContent>
         </Card>
 
-        {/* Order Summary */}
         <Card className="bg-gradient-to-r from-orange-50 to-amber-50 border-2 border-orange-200">
           <CardHeader>
             <CardTitle className="text-xl">Order Summary</CardTitle>
@@ -311,9 +227,7 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
             <div className="space-y-2">
               {cartItems.map((item, index) => (
                 <div key={index} className="flex items-center justify-between text-sm">
-                  <span className="text-gray-700">
-                    {item.name} × {item.quantity}
-                  </span>
+                  <span className="text-gray-700">{item.name} × {item.quantity}</span>
                   <span className="font-semibold">RM {(item.price * item.quantity).toFixed(2)}</span>
                 </div>
               ))}
@@ -324,17 +238,10 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
                 <span className="text-gray-700">Subtotal:</span>
                 <span className="font-semibold">RM {subtotal.toFixed(2)}</span>
               </div>
-              
               <div className="flex items-center justify-between text-base">
-                <span className="text-gray-700 flex items-center gap-2">
-                  <Truck className="w-4 h-4" />
-                  Delivery Charge:
-                </span>
-                <span className="font-semibold">
-                  {deliveryCharge === 0 ? 'FREE' : `RM ${deliveryCharge.toFixed(2)}`}
-                </span>
+                <span className="text-gray-700 flex items-center gap-2"><Truck className="w-4 h-4" />Delivery Charge:</span>
+                <span className="font-semibold">{deliveryCharge === 0 ? 'FREE' : `RM ${deliveryCharge.toFixed(2)}`}</span>
               </div>
-
               <div className="flex items-center justify-between text-xl pt-3 border-t">
                 <span className="font-bold text-gray-900">Total:</span>
                 <span className="font-bold text-orange-600">RM {total.toFixed(2)}</span>
@@ -350,34 +257,15 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
                   <Button type="button" variant={paymentMethod === 'debit' ? 'secondary' : 'outline'} className={`w-full sm:w-auto px-4 py-3 ${paymentMethod === 'debit' ? 'border-orange-500 bg-orange-50' : ''}`} onClick={() => setPaymentMethod('debit')}>Debit Card</Button>
                 </div>
               </div>
-
               <div>
                 <Label className="text-base">Payment Note (optional)</Label>
                 <Input value={paymentNote} onChange={(e) => setPaymentNote(e.target.value)} className="mt-2" />
               </div>
-
-              <div className="bg-white border rounded-lg p-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-700">Subtotal:</span>
-                  <span className="font-semibold">RM {subtotal.toFixed(2)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-700">Delivery Charge:</span>
-                  <span className="font-semibold">{deliveryCharge === 0 ? 'FREE' : `RM ${deliveryCharge.toFixed(2)}`}</span>
-                </div>
-                <div className="flex items-center justify-between pt-3 border-t">
-                  <span className="font-bold text-gray-900">Total:</span>
-                  <span className="font-bold text-orange-600">RM {total.toFixed(2)}</span>
-                </div>
-                <div className="mt-3">
-                  <Button size="lg" onClick={handlePlaceOrder} className="w-full bg-gradient-to-r from-green-500 to-emerald-500">Proceed to Confirmation</Button>
-                </div>
-              </div>
+              <Button size="lg" onClick={handlePlaceOrder} className="w-full bg-gradient-to-r from-green-500 to-emerald-500">
+                Proceed to Confirmation
+              </Button>
+              <p className="text-xs text-center text-gray-600">Orders require admin approval before processing</p>
             </div>
-
-            <p className="text-xs text-center text-gray-600">
-              Orders require admin approval before processing
-            </p>
           </CardContent>
         </Card>
       </div>

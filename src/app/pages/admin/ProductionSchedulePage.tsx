@@ -7,7 +7,7 @@ import { Button } from '../../components/ui/button';
 import { Calendar as CalendarIcon, ArrowLeft, Clock, ChefHat, Package, AlertCircle } from 'lucide-react';
 import { User } from '../../App';
 import { Calendar } from '../../components/ui/calendar';
-import { safeGetJSON } from '../../utils/storage';
+import { getOrders, getDailyLimits, saveDailyLimit, clearDailyLimit } from '../../utils/db';
 
 interface ProductionSchedulePageProps {
   user: User;
@@ -17,7 +17,7 @@ interface GroupedOrders {
   [date: string]: any[];
 }
 
-export default function ProductionSchedulePage({ user }: ProductionSchedulePageProps) {
+export default function ProductionSchedulePage({ user: _user }: ProductionSchedulePageProps) {
   const [groupedOrders, setGroupedOrders] = useState<GroupedOrders>({});
   const [dailyLimits, setDailyLimits] = useState<Record<string, number>>({});
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
@@ -35,21 +35,15 @@ export default function ProductionSchedulePage({ user }: ProductionSchedulePageP
   };
 
   const fromDateKey = (dateKey: string) => new Date(`${dateKey}T00:00:00`);
-
   const getOrderLabel = (order: any) => order.finalizedNumber || `Order #${order.id.slice(-6)}`;
-
-  const getOrderCountForDate = (dateKey: string) => {
-    const orders = safeGetJSON('orders', []);
-    return orders.filter((order: any) => order.deliveryDate === dateKey && order.status !== 'Rejected').length;
-  };
+  const getOrderCountForDate = (dateKey: string) => (groupedOrders[dateKey] || []).length;
 
   const getDaysUntil = (dateKey: string) => {
     const deliveryDate = fromDateKey(dateKey);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     deliveryDate.setHours(0, 0, 0, 0);
-    const diffTime = deliveryDate.getTime() - today.getTime();
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return Math.ceil((deliveryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
   };
 
   const getPriorityBadge = (daysUntil: number) => {
@@ -68,36 +62,45 @@ export default function ProductionSchedulePage({ user }: ProductionSchedulePageP
     return stages;
   };
 
-  const loadData = () => {
-    const orders = JSON.parse(localStorage.getItem('orders') || '[]');
+  const loadData = async () => {
+    const [orders, limits] = await Promise.all([getOrders(), getDailyLimits()]);
     const grouped: GroupedOrders = {};
-
     orders
       .filter((order: any) => order.status !== 'Rejected' && order.deliveryDate)
       .forEach((order: any) => {
         if (!grouped[order.deliveryDate]) grouped[order.deliveryDate] = [];
         grouped[order.deliveryDate].push(order);
       });
-
     setGroupedOrders(grouped);
-    setDailyLimits(safeGetJSON('dailyLimits', {}));
+    setDailyLimits(limits);
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
-  const saveLimit = (dateKey: string, limit: number) => {
-    const updated = { ...dailyLimits, [dateKey]: limit };
-    setDailyLimits(updated);
-    localStorage.setItem('dailyLimits', JSON.stringify(updated));
+  const handleSaveLimit = async (dateKey: string) => {
+    const parsed = parseInt(tempLimit || '0', 10);
+    if (parsed > 0) {
+      await saveDailyLimit(dateKey, parsed);
+      setDailyLimits(prev => ({ ...prev, [dateKey]: parsed }));
+    } else {
+      await clearDailyLimit(dateKey);
+      setDailyLimits(prev => {
+        const updated = { ...prev };
+        delete updated[dateKey];
+        return updated;
+      });
+    }
+    setTempLimit('');
   };
 
-  const clearLimit = (dateKey: string) => {
-    const updated = { ...dailyLimits };
-    delete updated[dateKey];
-    setDailyLimits(updated);
-    localStorage.setItem('dailyLimits', JSON.stringify(updated));
+  const handleClearLimit = async (dateKey: string) => {
+    await clearDailyLimit(dateKey);
+    setDailyLimits(prev => {
+      const updated = { ...prev };
+      delete updated[dateKey];
+      return updated;
+    });
+    setTempLimit('');
   };
 
   const selectedDateKey = toDateKey(selectedDate);
@@ -110,10 +113,9 @@ export default function ProductionSchedulePage({ user }: ProductionSchedulePageP
 
   const hasOrdersDates = Object.keys(groupedOrders).map(fromDateKey);
   const fullCapacityDates = Object.keys(dailyLimits)
-    .filter((dateKey) => {
+    .filter(dateKey => {
       const limit = dailyLimits[dateKey] ?? 0;
-      const count = getOrderCountForDate(dateKey);
-      return limit > 0 && count >= limit;
+      return limit > 0 && getOrderCountForDate(dateKey) >= limit;
     })
     .map(fromDateKey);
 
@@ -199,18 +201,8 @@ export default function ProductionSchedulePage({ user }: ProductionSchedulePageP
                     </div>
                     <div className="flex gap-2">
                       <Input value={tempLimit} onChange={(e) => setTempLimit(e.target.value.replace(/\D/g, ''))} placeholder="Max orders" className="h-11" />
-                      <Button
-                        onClick={() => {
-                          const parsed = parseInt(tempLimit || '0', 10);
-                          if (parsed > 0) saveLimit(selectedDateKey, parsed);
-                          else clearLimit(selectedDateKey);
-                          setTempLimit('');
-                        }}
-                        className="brand-button"
-                      >
-                        Save
-                      </Button>
-                      <Button variant="outline" onClick={() => { clearLimit(selectedDateKey); setTempLimit(''); }}>Clear</Button>
+                      <Button onClick={() => handleSaveLimit(selectedDateKey)} className="brand-button">Save</Button>
+                      <Button variant="outline" onClick={() => handleClearLimit(selectedDateKey)}>Clear</Button>
                     </div>
                   </div>
 
@@ -251,7 +243,6 @@ export default function ProductionSchedulePage({ user }: ProductionSchedulePageP
                                 {order.status}
                               </Badge>
                             </div>
-
                             <div className="space-y-2">
                               {order.items && order.items.map((item: any, index: number) => (
                                 <div key={index} className="flex items-center justify-between rounded bg-white p-2 text-sm">
@@ -260,27 +251,18 @@ export default function ProductionSchedulePage({ user }: ProductionSchedulePageP
                                 </div>
                               ))}
                             </div>
-
                             <div className="mt-3 flex items-center justify-between text-sm text-gray-600">
                               <div className="flex items-center gap-2">
                                 <Clock className="w-4 h-4" />
                                 <span>{order.deliveryMethod === 'delivery' ? 'Delivery' : 'Pickup'}</span>
                               </div>
-                              <span className="font-semibold text-gray-900">Total: RM {order.total.toFixed(2)}</span>
+                              <span className="font-semibold text-gray-900">Total: RM {(order.total || 0).toFixed(2)}</span>
                             </div>
                           </div>
                         ))}
                       </div>
                     )}
                   </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-4 space-y-2">
-                  <h4 className="font-semibold text-gray-900">Why this layout</h4>
-                  <p className="text-sm text-gray-600">A month view is a better operational default than a rolling 14-day strip because it reveals patterns, bottlenecks, and quiet periods at a glance.</p>
-                  <p className="text-sm text-gray-600">Google Calendar sync is still a separate integration project and should be added with backend OAuth and a sync endpoint. For this build, a real calendar UI gives the safest and biggest UX win.</p>
                 </CardContent>
               </Card>
             </div>

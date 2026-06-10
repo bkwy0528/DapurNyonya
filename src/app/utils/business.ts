@@ -17,10 +17,5 @@ export function generateFinalOrderNumber() {
 
 export function getMaxPrepDaysFromCart(cartItems: any[]) {
   if (!cartItems || cartItems.length === 0) return 1;
-  return cartItems.reduce((max: number, item: any) => {
-    const storedProducts = JSON.parse(localStorage.getItem('products') || '[]');
-    const product = storedProducts.find((p: any) => p.id === item.productId);
-    const prepDays = item.prepDays || product?.prepDays || 1;
-    return Math.max(max, prepDays);
-  }, 1);
+  return cartItems.reduce((max: number, item: any) => Math.max(max, item.prepDays || 1), 1);
 }

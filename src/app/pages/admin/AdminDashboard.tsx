@@ -1,143 +1,178 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
+import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
-import { ShoppingCart, Calendar, Package, Settings, LogOut, User, TrendingUp, Clock, UtensilsCrossed, BarChart } from 'lucide-react';
+import { Badge } from '../../components/ui/badge';
+import { ShoppingCart, Calendar, Package, User, TrendingUp, Clock, BarChart, ChefHat } from 'lucide-react';
 import { User as UserType } from '../../App';
+import { getOrders, getAdminProfile } from '../../utils/db';
 
 interface AdminDashboardProps {
   user: UserType;
-  onLogout: () => void;
 }
 
-export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
+const STATUS_STYLES: Record<string, string> = {
+  'Pending Approval': 'bg-yellow-100 text-yellow-700',
+  'Order Received': 'bg-blue-100 text-blue-700',
+  'In Preparation': 'bg-orange-100 text-orange-700',
+  'Ready for Pickup': 'bg-green-100 text-green-700',
+  'Delivered': 'bg-gray-100 text-gray-700',
+  'Rejected': 'bg-red-100 text-red-700',
+};
+
+export default function AdminDashboard({ user }: AdminDashboardProps) {
   const [stats, setStats] = useState({
     totalOrdersToday: 0,
     pendingOrders: 0,
     upcomingProduction: 0,
-    totalRevenue: 0
+    totalRevenue: 0,
   });
+  const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [adminProfilePicture, setAdminProfilePicture] = useState<string>('');
 
   useEffect(() => {
-    const orders = JSON.parse(localStorage.getItem('orders') || '[]');
-    const today = new Date().toDateString();
-    
-    const todayOrders = orders.filter((order: any) => 
-      new Date(order.orderDate || order.createdAt || Date.now()).toDateString() === today
-    );
-    const pending = orders.filter((order: any) => 
-      order.status === 'Pending Approval' || (order.status !== 'Delivered' && order.status !== 'Ready for Pickup' && order.status !== 'Rejected')
-    );
-    const upcoming = orders.filter((order: any) => {
-      if (!order.deliveryDate) return false;
-      const deliveryDate = new Date(order.deliveryDate);
-      const daysUntil = Math.ceil((deliveryDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-      return daysUntil <= 7 && daysUntil >= 0;
-    });
-    
-    const revenue = orders
-      .filter((order: any) => order.status !== 'Rejected')
-      .reduce((sum: number, order: any) => {
-        const orderTotal = order.total || 0;
-        return sum + (typeof orderTotal === 'number' ? orderTotal : 0);
-      }, 0);
+    const load = async () => {
+      const orders = await getOrders();
+      const today = new Date().toDateString();
 
-    setStats({
-      totalOrdersToday: todayOrders.length,
-      pendingOrders: pending.length,
-      upcomingProduction: upcoming.length,
-      totalRevenue: revenue || 0
-    });
+      const todayOrders = orders.filter((o: any) =>
+        new Date(o.orderDate || o.createdAt || Date.now()).toDateString() === today
+      );
+      const pending = orders.filter((o: any) => o.status === 'Pending Approval');
+      const upcoming = orders.filter((o: any) => {
+        if (!o.deliveryDate) return false;
+        const daysUntil = Math.ceil((new Date(o.deliveryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+        return daysUntil <= 7 && daysUntil >= 0;
+      });
+      const revenue = orders
+        .filter((o: any) => o.status !== 'Rejected')
+        .reduce((sum: number, o: any) => sum + (typeof o.total === 'number' ? o.total : 0), 0);
 
-    // Load admin profile picture
-    const adminProfile = localStorage.getItem('adminProfile');
-    if (adminProfile) {
-      const profile = JSON.parse(adminProfile);
-      setAdminProfilePicture(profile.profilePicture || '');
-    }
+      setStats({
+        totalOrdersToday: todayOrders.length,
+        pendingOrders: pending.length,
+        upcomingProduction: upcoming.length,
+        totalRevenue: revenue,
+      });
+
+      const recent = [...orders]
+        .sort((a: any, b: any) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime())
+        .slice(0, 6);
+      setRecentOrders(recent);
+
+      const profile = await getAdminProfile();
+      if (profile?.profilePicture) setAdminProfilePicture(profile.profilePicture);
+    };
+    load();
   }, []);
 
   const statCards = [
-    {
-      title: 'Orders Today',
-      value: stats.totalOrdersToday,
-      icon: ShoppingCart,
-      color: 'from-blue-500 to-blue-600',
-      bgColor: 'bg-blue-50',
-      textColor: 'text-blue-600'
-    },
-    {
-      title: 'Pending Orders',
-      value: stats.pendingOrders,
-      icon: Clock,
-      color: 'from-orange-500 to-orange-600',
-      bgColor: 'bg-orange-50',
-      textColor: 'text-orange-600'
-    },
-    {
-      title: 'Upcoming Production',
-      value: stats.upcomingProduction,
-      icon: Package,
-      color: 'from-green-500 to-green-600',
-      bgColor: 'bg-green-50',
-      textColor: 'text-green-600'
-    },
-    {
-      title: 'Total Revenue',
-      value: `RM ${stats.totalRevenue.toFixed(2)}`,
-      icon: TrendingUp,
-      color: 'from-purple-500 to-purple-600',
-      bgColor: 'bg-purple-50',
-      textColor: 'text-purple-600'
-    }
+    { title: 'Orders Today', value: stats.totalOrdersToday, icon: ShoppingCart, bgColor: 'bg-blue-50', textColor: 'text-blue-600' },
+    { title: 'Pending Approval', value: stats.pendingOrders, icon: Clock, bgColor: 'bg-yellow-50', textColor: 'text-yellow-600' },
+    { title: 'Upcoming (7 days)', value: stats.upcomingProduction, icon: Calendar, bgColor: 'bg-orange-50', textColor: 'text-orange-600' },
+    { title: 'Total Revenue', value: `RM ${stats.totalRevenue.toFixed(2)}`, icon: TrendingUp, bgColor: 'bg-green-50', textColor: 'text-green-600' },
+  ];
+
+  const quickActions = [
+    { label: 'Manage Orders', icon: ShoppingCart, to: '/admin/orders', color: 'bg-blue-500 hover:bg-blue-600' },
+    { label: 'Production Schedule', icon: ChefHat, to: '/admin/schedule', color: 'bg-orange-500 hover:bg-orange-600' },
+    { label: 'Ingredients', icon: Package, to: '/admin/ingredients', color: 'bg-green-500 hover:bg-green-600' },
+    { label: 'Analytics', icon: BarChart, to: '/admin/analytics', color: 'bg-purple-500 hover:bg-purple-600' },
   ];
 
   return (
-    <div className="min-h-screen pb-12">
-      {/* Header */}
+    <div className="min-h-screen pb-24">
       <div className="brand-gradient text-white p-6 pb-8">
         <div className="page-hero__inner page-hero__inner--wide">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center space-x-3">
-              <Link to="/admin/profile" className="w-12 h-12 bg-white bg-opacity-20 rounded-full flex items-center justify-center overflow-hidden cursor-pointer hover:bg-opacity-30 transition-all">
-                {adminProfilePicture ? (
-                  <img src={adminProfilePicture} alt="Admin Profile" className="w-full h-full object-cover" />
-                ) : (
-                  <User className="w-6 h-6" />
-                )}
-              </Link>
-              <div>
-                <p className="text-sm opacity-90">Admin Dashboard</p>
-                <p className="text-xl">{user.name}</p>
-              </div>
+          <div className="flex items-center space-x-4 mb-2">
+            <div className="w-14 h-14 bg-white bg-opacity-20 rounded-full flex items-center justify-center overflow-hidden">
+              {adminProfilePicture ? (
+                <img src={adminProfilePicture} alt="Admin" className="w-full h-full object-cover" />
+              ) : (
+                <User className="w-8 h-8 text-white" />
+              )}
+            </div>
+            <div>
+              <p className="text-sm opacity-80">Admin Dashboard</p>
+              <p className="text-xl">{user.name}</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="max-w-6xl mx-auto px-6 -mt-4 mb-8">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {statCards.map((stat, index) => {
-            const Icon = stat.icon;
+      <div className="max-w-6xl mx-auto px-6 py-8 space-y-8">
+        {/* Stat Cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {statCards.map((card) => {
+            const Icon = card.icon;
             return (
-              <Card key={index} className="overflow-hidden shadow-lg">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className={`w-12 h-12 rounded-full ${stat.bgColor} flex items-center justify-center`}>
-                      <Icon className={`w-6 h-6 ${stat.textColor}`} />
-                    </div>
+              <Card key={card.title} className={`${card.bgColor} border-0`}>
+                <CardContent className="p-5">
+                  <div className="flex items-center justify-between mb-2">
+                    <Icon className={`w-6 h-6 ${card.textColor}`} />
                   </div>
-                  <p className="text-sm text-gray-600 mb-1">{stat.title}</p>
-                  <p className="text-3xl font-bold text-gray-900">{stat.value}</p>
+                  <p className="text-2xl font-bold text-gray-900">{card.value}</p>
+                  <p className="text-sm text-gray-600 mt-1">{card.title}</p>
                 </CardContent>
               </Card>
             );
           })}
         </div>
-      </div>
 
+        {/* Quick Actions */}
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {quickActions.map((action) => {
+              const Icon = action.icon;
+              return (
+                <Link key={action.label} to={action.to}>
+                  <button className={`w-full ${action.color} text-white rounded-xl p-5 flex flex-col items-center gap-3 transition-colors`}>
+                    <Icon className="w-7 h-7" />
+                    <span className="text-sm font-medium text-center">{action.label}</span>
+                  </button>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Recent Orders */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">Recent Orders</h2>
+            <Link to="/admin/orders">
+              <Button variant="outline" size="sm">View All</Button>
+            </Link>
+          </div>
+          {recentOrders.length === 0 ? (
+            <Card>
+              <CardContent className="p-8 text-center text-gray-500">No orders yet</CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent className="p-0 divide-y">
+                {recentOrders.map((order) => (
+                  <div key={order.id} className="flex items-center justify-between p-4">
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        {order.finalizedNumber || `Order #${order.id.slice(-6)}`}
+                      </p>
+                      <p className="text-sm text-gray-500">{order.customerName}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="font-semibold text-orange-600">RM {(order.total || 0).toFixed(2)}</span>
+                      <Badge className={STATUS_STYLES[order.status] || 'bg-gray-100 text-gray-700'}>
+                        {order.status}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

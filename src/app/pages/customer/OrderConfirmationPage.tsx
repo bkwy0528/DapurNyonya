@@ -4,8 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Button } from '../../components/ui/button';
 import { useCart } from '../../context/CartContext';
 import { toast } from 'sonner';
+import { createOrder } from '../../utils/db';
 
-export default function OrderConfirmationPage({ user }: any) {
+export default function OrderConfirmationPage() {
   const navigate = useNavigate();
   const { clearCart } = useCart();
   const [pendingOrder, setPendingOrder] = useState<any>(null);
@@ -15,14 +16,9 @@ export default function OrderConfirmationPage({ user }: any) {
     if (raw) setPendingOrder(JSON.parse(raw));
   }, []);
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!pendingOrder) return;
-    const existingOrders = JSON.parse(localStorage.getItem('orders') || '[]');
-    const finalOrder = {
-      ...pendingOrder,
-      status: 'Pending Approval',
-    };
-    localStorage.setItem('orders', JSON.stringify([...existingOrders, finalOrder]));
+    await createOrder({ ...pendingOrder, status: 'Pending Approval' });
     sessionStorage.removeItem('pendingOrder');
     clearCart();
     toast.success('Order submitted. Await admin confirmation.');
@@ -32,9 +28,7 @@ export default function OrderConfirmationPage({ user }: any) {
   if (!pendingOrder) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6">
-        <Card>
-          <CardContent className="p-8">No pending order found.</CardContent>
-        </Card>
+        <Card><CardContent className="p-8">No pending order found.</CardContent></Card>
       </div>
     );
   }
@@ -53,8 +47,20 @@ export default function OrderConfirmationPage({ user }: any) {
             </div>
 
             <div className="space-y-2">
+              <p className="text-sm text-gray-600">Delivery Method</p>
+              <p className="font-semibold">{pendingOrder.deliveryMethod === 'delivery' ? 'Delivery' : 'Pickup'}</p>
+            </div>
+
+            {pendingOrder.deliveryMethod === 'delivery' && pendingOrder.deliveryAddress && (
+              <div className="space-y-2">
+                <p className="text-sm text-gray-600">Delivery Address</p>
+                <p className="font-semibold">{pendingOrder.deliveryAddress}</p>
+              </div>
+            )}
+
+            <div className="space-y-2">
               <p className="text-sm text-gray-600">Payment Method</p>
-              <p className="font-semibold">{pendingOrder.paymentMethod}</p>
+              <p className="font-semibold capitalize">{pendingOrder.paymentMethod}</p>
             </div>
 
             <div className="space-y-2">
@@ -67,10 +73,18 @@ export default function OrderConfirmationPage({ user }: any) {
               ))}
             </div>
 
-            <div className="pt-4 border-t">
+            <div className="pt-4 border-t space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-gray-700">Total</span>
-                <span className="font-bold text-orange-600">RM {((pendingOrder.total || 0)).toFixed(2)}</span>
+                <span className="text-gray-700">Subtotal</span>
+                <span className="font-semibold">RM {(pendingOrder.subtotal || 0).toFixed(2)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-700">Delivery Charge</span>
+                <span className="font-semibold">{pendingOrder.deliveryCharge === 0 ? 'FREE' : `RM ${(pendingOrder.deliveryCharge || 0).toFixed(2)}`}</span>
+              </div>
+              <div className="flex items-center justify-between pt-2 border-t">
+                <span className="font-bold text-gray-900">Total</span>
+                <span className="font-bold text-orange-600">RM {(pendingOrder.total || 0).toFixed(2)}</span>
               </div>
             </div>
 

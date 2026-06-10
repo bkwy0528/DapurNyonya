@@ -5,18 +5,16 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { ArrowLeft, User as UserIcon, Mail, Phone, Lock } from 'lucide-react';
+import { ArrowLeft, User as UserIcon, Mail, Phone, Lock, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
-import { User } from '../App';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../../firebase';
+import { saveUserProfile } from '../utils/db';
 import { validatePassword } from '../utils/business';
 import PageContainer from '../components/ui/PageContainer';
 import FormSection from '../components/ui/FormSection';
 
-interface RegisterPageProps {
-  onRegister: (user: User) => void;
-}
-
-export default function RegisterPage({ onRegister }: RegisterPageProps) {
+export default function RegisterPage() {
   const navigate = useNavigate();
   const [name, setName] = useState('');
   const [countryCode, setCountryCode] = useState('+60');
@@ -24,12 +22,15 @@ export default function RegisterPage({ onRegister }: RegisterPageProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!name || !phone || !password) {
+
+    if (!name || !phone || !email || !password) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -45,33 +46,30 @@ export default function RegisterPage({ onRegister }: RegisterPageProps) {
       return;
     }
 
-    const fullPhone = `${countryCode}${phone}`;
-
-    // Check if user already exists
-    const users = JSON.parse(localStorage.getItem('users') || '[]');
-    const existingUser = users.find((u: any) => u.phone === fullPhone);
-    
-    if (existingUser) {
-      toast.error('Phone number already registered');
-      return;
+    setLoading(true);
+    try {
+      const credential = await createUserWithEmailAndPassword(auth, email, password);
+      const uid = credential.user.uid;
+      const fullPhone = `${countryCode}${phone}`;
+      await saveUserProfile(uid, {
+        id: uid,
+        name,
+        phone: fullPhone,
+        email,
+        role: 'customer',
+      });
+      toast.success('Registration successful!');
+      navigate('/customer/home');
+    } catch (err: any) {
+      const code = err.code as string;
+      if (code === 'auth/email-already-in-use') {
+        toast.error('An account with this email already exists');
+      } else {
+        toast.error('Registration failed. Please try again.');
+      }
+    } finally {
+      setLoading(false);
     }
-
-    // Create new customer user
-    const newUser: User = {
-      id: Date.now().toString(),
-      name,
-      phone: fullPhone,
-      email: email || undefined,
-      role: 'customer'
-    };
-
-    // Save to localStorage
-    users.push({ ...newUser, password });
-    localStorage.setItem('users', JSON.stringify(users));
-
-    onRegister(newUser);
-    toast.success('Registration successful!');
-    navigate('/customer/home');
   };
 
   return (
@@ -105,11 +103,8 @@ export default function RegisterPage({ onRegister }: RegisterPageProps) {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="+60">🇲🇾 +60</SelectItem>
-                      <SelectItem value="+65">🇸🇬 +65</SelectItem>
-                      <SelectItem value="+62">🇮🇩 +62</SelectItem>
-                      <SelectItem value="+66">🇹🇭 +66</SelectItem>
-                      <SelectItem value="+1">🇺🇸 +1</SelectItem>
+                      <SelectItem value="+60">🇲🇾 +60 (Malaysia)</SelectItem>
+                      <SelectItem value="+65">🇸🇬 +65 (Singapore)</SelectItem>
                     </SelectContent>
                   </Select>
                   <div className="relative flex-1">
@@ -121,10 +116,10 @@ export default function RegisterPage({ onRegister }: RegisterPageProps) {
               </FormSection>
 
               <FormSection>
-                <Label htmlFor="email" className="text-base">Email (Optional)</Label>
+                <Label htmlFor="email" className="text-base">Email *</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <Input id="email" type="email" placeholder="Enter your email" value={email} onChange={(e) => setEmail(e.target.value)} className="pl-12 text-base" />
+                  <Input id="email" type="email" placeholder="Enter your email" value={email} onChange={(e) => setEmail(e.target.value)} className="pl-12 text-base" required />
                 </div>
               </FormSection>
 
@@ -132,7 +127,10 @@ export default function RegisterPage({ onRegister }: RegisterPageProps) {
                 <Label htmlFor="password" className="text-base">Password *</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <Input id="password" type="password" placeholder="Create a password" value={password} onChange={(e) => setPassword(e.target.value)} className="pl-12 text-base" required />
+                  <Input id="password" type={showPassword ? 'text' : 'password'} placeholder="Create a password" value={password} onChange={(e) => setPassword(e.target.value)} className="pl-12 pr-12 text-base" required />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
                 </div>
               </FormSection>
 
@@ -140,7 +138,10 @@ export default function RegisterPage({ onRegister }: RegisterPageProps) {
                 <Label htmlFor="confirmPassword" className="text-base">Confirm Password *</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <Input id="confirmPassword" type="password" placeholder="Confirm your password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="pl-12 text-base" required />
+                  <Input id="confirmPassword" type={showConfirmPassword ? 'text' : 'password'} placeholder="Confirm your password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="pl-12 pr-12 text-base" required />
+                  <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
                 </div>
               </FormSection>
 
@@ -153,7 +154,9 @@ export default function RegisterPage({ onRegister }: RegisterPageProps) {
               )}
             </CardContent>
             <CardFooter className="flex flex-col space-y-4">
-              <Button type="submit" size="lg" className="w-full text-lg bg-gradient-to-r from-orange-500 to-amber-500">Register</Button>
+              <Button type="submit" size="lg" disabled={loading} className="w-full text-lg bg-gradient-to-r from-orange-500 to-amber-500">
+                {loading ? 'Creating account…' : 'Register'}
+              </Button>
               <p className="text-center text-gray-600">Already have an account? <Link to="/login" className="text-orange-600 hover:text-orange-700">Login here</Link></p>
             </CardFooter>
           </form>

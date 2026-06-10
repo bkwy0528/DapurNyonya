@@ -1,33 +1,38 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
-import { User as UserIconLucide, LogOut, Package } from 'lucide-react';
+import { User as UserIconLucide, Package } from 'lucide-react';
 import { User as UserType } from '../../App';
-import { useCart } from '../../context/CartContext';
-import { useState, useEffect } from 'react';
-import { safeGetJSON } from '../../utils/storage';
+import { getProducts, getSettings } from '../../utils/db';
 
 interface CustomerHomePageProps {
   user: UserType;
-  onLogout: () => void;
 }
 
-export default function CustomerHomePage({ user, onLogout }: CustomerHomePageProps) {
+export default function CustomerHomePage({ user }: CustomerHomePageProps) {
   const [products, setProducts] = useState<any[]>([]);
+  const [announcement, setAnnouncement] = useState({
+    enabled: true,
+    title: 'Festive Season Orders Open!',
+    text: 'Place your orders now for the upcoming celebrations. Limited slots available!',
+  });
 
   useEffect(() => {
-    loadProducts();
+    getProducts().then(all => setProducts(all.filter((p: any) => p.available)));
+    getSettings().then(s => {
+      if (!s) return;
+      setAnnouncement({
+        enabled: s.announcementEnabled !== false,
+        title: s.announcementTitle || 'Festive Season Orders Open!',
+        text: s.announcementText || 'Place your orders now for the upcoming celebrations. Limited slots available!',
+      });
+    });
   }, []);
-
-  const loadProducts = () => {
-    const products = safeGetJSON('products', []);
-    setProducts(products.filter((p: any) => p.available));
-  };
 
   return (
     <div className="min-h-screen pb-12">
-      {/* Header */}
       <div className="brand-gradient text-white p-6 pb-8">
         <div className="page-hero__inner">
           <div className="flex items-center justify-between mb-6">
@@ -48,24 +53,24 @@ export default function CustomerHomePage({ user, onLogout }: CustomerHomePagePro
         </div>
       </div>
 
-      {/* Notice Banner */}
-      <div className="max-w-4xl mx-auto px-6 -mt-4">
-        <Card className="bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 shadow-lg">
-          <CardContent className="p-5">
-            <div className="flex items-start space-x-3">
-              <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
-                <Package className="w-5 h-5 text-white" />
+      {announcement.enabled && (
+        <div className="max-w-4xl mx-auto px-6 -mt-4">
+          <Card className="bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 shadow-lg">
+            <CardContent className="p-5">
+              <div className="flex items-start space-x-3">
+                <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Package className="w-5 h-5 text-white" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-gray-900 mb-1">{announcement.title}</h3>
+                  <p className="text-sm text-gray-700">{announcement.text}</p>
+                </div>
               </div>
-              <div className="flex-1">
-                <h3 className="font-semibold text-gray-900 mb-1">Festive Season Orders Open!</h3>
-                <p className="text-sm text-gray-700">Place your orders now for the upcoming celebrations. Limited slots available!</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
-      {/* Products Section */}
       <div className="max-w-4xl mx-auto px-6 py-8">
         <div className="mb-6">
           <h2 className="text-2xl font-semibold text-gray-900">Available Products</h2>
@@ -77,11 +82,7 @@ export default function CustomerHomePage({ user, onLogout }: CustomerHomePagePro
             <Card key={product.id} className="overflow-hidden hover:shadow-lg transition-shadow">
               <div className="flex flex-col sm:flex-row">
                 <div className="sm:w-48 h-48 sm:h-auto overflow-hidden flex-shrink-0">
-                  <img
-                    src={product.image}
-                    alt={product.name}
-                    className="w-full h-full object-cover"
-                  />
+                  <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
                 </div>
                 <div className="flex-1 p-6">
                   <div className="flex items-start justify-between mb-3">
@@ -97,14 +98,10 @@ export default function CustomerHomePage({ user, onLogout }: CustomerHomePagePro
                     <div className="text-2xl font-bold text-orange-600">RM {product.price.toFixed(2)}</div>
                     <div className="flex flex-wrap gap-3 w-full sm:w-auto">
                       <Link to={`/customer/product/${product.id}`} className="flex-1 sm:flex-none">
-                        <Button className="w-full sm:w-auto brand-button">
-                          View Product
-                        </Button>
+                        <Button className="w-full sm:w-auto brand-button">View Product</Button>
                       </Link>
                       <Link to={`/customer/order/${product.id}`} className="flex-1 sm:flex-none">
-                        <Button className="w-full sm:w-auto success-button">
-                          Add to Cart
-                        </Button>
+                        <Button className="w-full sm:w-auto success-button">Add to Cart</Button>
                       </Link>
                     </div>
                   </div>
@@ -114,7 +111,6 @@ export default function CustomerHomePage({ user, onLogout }: CustomerHomePagePro
           ))}
         </div>
       </div>
-
     </div>
   );
 }

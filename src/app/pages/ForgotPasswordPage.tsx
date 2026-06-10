@@ -1,59 +1,47 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router';
+import { Link } from 'react-router';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Button } from '../components/ui/button';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Mail } from 'lucide-react';
 import { toast } from 'sonner';
-import { validatePassword } from '../utils/business';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '../../firebase';
 
 export default function ForgotPasswordPage() {
-  const navigate = useNavigate();
-  const [identifier, setIdentifier] = useState('');
-  const [step, setStep] = useState<'find'|'reset'>('find');
-  const [userIdx, setUserIdx] = useState<number | null>(null);
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [errors, setErrors] = useState<string[]>([]);
+  const [email, setEmail] = useState('');
+  const [sent, setSent] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleFind = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const users = JSON.parse(localStorage.getItem('users') || '[]');
-    const idx = users.findIndex((u: any) => u.phone === identifier || u.email === identifier);
-    if (idx === -1) {
-      toast.error('No account found with that phone or email');
+    if (!email) {
+      toast.error('Please enter your email address');
       return;
     }
-    setUserIdx(idx);
-    setStep('reset');
-  };
-
-  const handleReset = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (password !== confirmPassword) {
-      setErrors(['Passwords do not match']);
-      return;
+    setLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setSent(true);
+      toast.success('Password reset email sent!');
+    } catch (err: any) {
+      if (err.code === 'auth/user-not-found') {
+        toast.error('No account found with that email');
+      } else {
+        toast.error('Failed to send reset email. Please try again.');
+      }
+    } finally {
+      setLoading(false);
     }
-    const pwErrors = validatePassword(password);
-    if (pwErrors.length > 0) {
-      setErrors(pwErrors);
-      return;
-    }
-    const users = JSON.parse(localStorage.getItem('users') || '[]');
-    if (userIdx === null) return;
-    users[userIdx].password = password;
-    localStorage.setItem('users', JSON.stringify(users));
-    toast.success('Password reset successful');
-    navigate('/login');
   };
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6">
       <div className="max-w-md w-full space-y-6">
-        <Link to="/" className="inline-flex items-center text-gray-600 hover:text-gray-900">
+        <Link to="/login" className="inline-flex items-center text-gray-600 hover:text-gray-900">
           <ArrowLeft className="w-5 h-5 mr-2" />
-          <span className="text-lg">Back</span>
+          <span className="text-lg">Back to Login</span>
         </Link>
 
         <Card className="shadow-xl border-0">
@@ -61,37 +49,34 @@ export default function ForgotPasswordPage() {
             <CardTitle className="text-2xl text-center">Forgot Password</CardTitle>
           </CardHeader>
 
-          {step === 'find' ? (
-            <form onSubmit={handleFind}>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="identifier" className="text-base">Email or Phone</Label>
-                  <Input id="identifier" value={identifier} onChange={(e) => setIdentifier(e.target.value)} className="h-12" />
-                </div>
-              </CardContent>
-              <CardFooter>
-                <Button type="submit" className="w-full">Find Account</Button>
-              </CardFooter>
-            </form>
+          {sent ? (
+            <CardContent className="space-y-4 text-center">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto">
+                <Mail className="w-8 h-8 text-green-600" />
+              </div>
+              <p className="text-gray-700">
+                A password reset link has been sent to <strong>{email}</strong>. Check your inbox and follow the instructions.
+              </p>
+              <Link to="/login" className="block">
+                <Button className="w-full brand-button">Back to Login</Button>
+              </Link>
+            </CardContent>
           ) : (
-            <form onSubmit={handleReset}>
+            <form onSubmit={handleSubmit}>
               <CardContent className="space-y-4">
+                <p className="text-sm text-gray-600">Enter your email address and we'll send you a link to reset your password.</p>
                 <div className="space-y-2">
-                  <Label htmlFor="password" className="text-base">New Password</Label>
-                  <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="h-12" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="confirmPassword" className="text-base">Confirm Password</Label>
-                  <Input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="h-12" />
-                </div>
-                {errors.length > 0 && (
-                  <div className="text-sm text-red-600">
-                    {errors.map((err, i) => <div key={i}>- {err}</div>)}
+                  <Label htmlFor="email" className="text-base">Email Address</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Enter your email" className="pl-12 h-12" />
                   </div>
-                )}
+                </div>
               </CardContent>
               <CardFooter>
-                <Button type="submit" className="w-full">Reset Password</Button>
+                <Button type="submit" disabled={loading} className="w-full brand-button">
+                  {loading ? 'Sending…' : 'Send Reset Link'}
+                </Button>
               </CardFooter>
             </form>
           )}

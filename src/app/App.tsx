@@ -3,6 +3,9 @@ import { useState, useEffect } from 'react';
 import { Toaster } from './components/ui/sonner';
 import { CartProvider } from './context/CartContext';
 import Header from './components/ui/header';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { auth } from '../firebase';
+import { ADMIN_EMAIL, getAdminProfile, getUserProfile, getProducts, seedDefaultProducts } from './utils/db';
 
 // Import Pages
 import WelcomePage from './pages/WelcomePage';
@@ -39,79 +42,56 @@ export interface User {
 }
 
 function App() {
-  const [user, setUser] = useState<User | null>(() => {
-    try {
-      const saved = localStorage.getItem('user');
-      return saved ? JSON.parse(saved) : null;
-    } catch (e) {
-      return null;
-    }
-  });
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
-  // Initialize default products on app load
   useEffect(() => {
-    const storedProducts = localStorage.getItem('products');
-    if (!storedProducts) {
-      const defaultProducts = [
-        {
-          id: '1',
-          name: 'Traditional Dumplings',
-          description: 'Handmade with premium ingredients, perfect for festive celebrations',
-          price: 25.00,
-          image: 'https://images.unsplash.com/photo-1766309416197-5982d32f4ce0?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxkdW1wbGluZ3MlMjBmb29kJTIwZmVzdGl2ZXxlbnwxfHx8fDE3NjY3NDIxMTF8MA&ixlib=rb-4.1.0&q=80&w=1080',
-          unit: 'pack (12 pieces)',
-          prepDays: 3,
-          available: true
-        },
-        {
-          id: '2',
-          name: 'Festive Cookies',
-          description: 'Assorted cookies with traditional flavors and decorations',
-          price: 18.00,
-          image: 'https://images.unsplash.com/photo-1627373369962-42fd4fde6504?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxjb29raWVzJTIwZmVzdGl2ZSUyMHNuYWNrc3xlbnwxfHx8fDE3NjY3NDIxMTJ8MA&ixlib=rb-4.1.0&q=80&w=1080',
-          unit: 'box (20 cookies)',
-          prepDays: 2,
-          available: true
-        },
-        {
-          id: '3',
-          name: 'Traditional Snacks',
-          description: 'Mix of authentic handmade snacks for every occasion',
-          price: 22.00,
-          image: 'https://images.unsplash.com/photo-1680345576132-9dc2b41636c3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx0cmFkaXRpb25hbCUyMHNuYWNrcyUyMGZvb2R8ZW58MXx8fHwxNzY2NzQyMTEyfDA&ixlib=rb-4.1.0&q=80&w=1080',
-          unit: 'pack (500g)',
-          prepDays: 1,
-          available: true
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        if (firebaseUser.email === ADMIN_EMAIL) {
+          const profile = await getAdminProfile();
+          setUser({
+            id: firebaseUser.uid,
+            name: profile?.name || 'Admin',
+            email: firebaseUser.email,
+            phone: profile?.phone || '',
+            role: 'admin',
+            profilePicture: profile?.profilePicture,
+          });
+          // Seed default products on first admin login
+          const products = await getProducts();
+          if (products.length === 0) await seedDefaultProducts();
+        } else {
+          const profile = await getUserProfile(firebaseUser.uid);
+          if (profile) {
+            setUser({ ...profile, id: firebaseUser.uid, role: 'customer' });
+          } else {
+            setUser(null);
+          }
         }
-      ];
-      localStorage.setItem('products', JSON.stringify(defaultProducts));
-    }
+      } else {
+        setUser(null);
+      }
+      setAuthLoading(false);
+    });
+    return unsubscribe;
   }, []);
 
-  const handleLogin = (userData: User) => {
-    setUser(userData);
-    try {
-      localStorage.setItem('user', JSON.stringify(userData));
-    } catch (e) {
-      // ignore
-    }
-  };
-
-  const handleLogout = () => {
-    setUser(null);
-    try {
-      localStorage.removeItem('user');
-    } catch (e) {}
+  const handleLogout = async () => {
+    await signOut(auth);
   };
 
   const handleProfileUpdate = (updatedUser: User) => {
     setUser(updatedUser);
-    try {
-      localStorage.setItem('user', JSON.stringify(updatedUser));
-    } catch (e) {
-      // ignore
-    }
   };
+
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="w-10 h-10 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <CartProvider>
@@ -121,8 +101,8 @@ function App() {
           <Routes>
             {/* Public Routes */}
             <Route path="/" element={<WelcomePage />} />
-            <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
-            <Route path="/register" element={<RegisterPage onRegister={handleLogin} />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
             {/* Customer Routes */}
@@ -131,12 +111,12 @@ function App() {
               element={
                 user?.role === 'customer' ? (
                   <Routes>
-                    <Route path="home" element={<CustomerHomePage user={user} onLogout={handleLogout} />} />
+                    <Route path="home" element={<CustomerHomePage user={user} />} />
                     <Route path="product/:productId" element={<ProductDetailPage user={user} />} />
                     <Route path="order/:productId" element={<ProductOrderPage user={user} />} />
                     <Route path="cart" element={<CartPage user={user} />} />
                     <Route path="checkout" element={<CheckoutPage user={user} />} />
-                    <Route path="order-confirmation" element={<OrderConfirmationPage user={user} />} />
+                    <Route path="order-confirmation" element={<OrderConfirmationPage />} />
                     <Route path="order-summary" element={<OrderSummaryPage user={user} />} />
                     <Route path="tracking" element={<CustomerOrderTrackingPage user={user} />} />
                     <Route path="profile" element={<ProfilePage user={user} onLogout={handleLogout} onProfileUpdate={handleProfileUpdate} />} />
@@ -153,7 +133,7 @@ function App() {
               element={
                 user?.role === 'admin' ? (
                   <Routes>
-                    <Route path="dashboard" element={<AdminDashboard user={user} onLogout={handleLogout} />} />
+                    <Route path="dashboard" element={<AdminDashboard user={user} />} />
                     <Route path="orders" element={<OrderManagementPage user={user} />} />
                     <Route path="schedule" element={<ProductionSchedulePage user={user} />} />
                     <Route path="ingredients" element={<IngredientEstimationPage user={user} />} />

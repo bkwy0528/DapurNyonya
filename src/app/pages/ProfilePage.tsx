@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { ArrowLeft, User as UserIcon, Camera, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { User } from '../App';
+import { saveUserProfile } from '../utils/db';
 
 interface ProfilePageProps {
   user: User;
@@ -18,8 +19,12 @@ interface ProfilePageProps {
 
 export default function ProfilePage({ user, onLogout, onProfileUpdate }: ProfilePageProps) {
   const [name, setName] = useState(user.name);
-  const [countryCode, setCountryCode] = useState(user.phone.substring(0, 3));
-  const [phone, setPhone] = useState(user.phone.substring(3));
+  const [countryCode, setCountryCode] = useState(
+    user.phone.startsWith('+65') ? '+65' : '+60'
+  );
+  const [phone, setPhone] = useState(
+    user.phone.startsWith('+65') ? user.phone.slice(3) : user.phone.startsWith('+60') ? user.phone.slice(3) : user.phone
+  );
   const [email, setEmail] = useState(user.email || '');
   const [address, setAddress] = useState(user.address || '');
   const [notes, setNotes] = useState(user.notes || '');
@@ -29,28 +34,15 @@ export default function ProfilePage({ user, onLogout, onProfileUpdate }: Profile
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setProfilePicture(reader.result as string);
-      };
+      reader.onloadend = () => setProfilePicture(reader.result as string);
       reader.readAsDataURL(file);
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const fullPhone = `${countryCode}${phone}`;
     const updatedUser = { ...user, name, phone: fullPhone, email, address, notes, profilePicture };
-    
-    // Update user in localStorage
-    if (user.role === 'customer') {
-      const users = JSON.parse(localStorage.getItem('users') || '[]');
-      const updatedUsers = users.map((u: any) => 
-        u.id === user.id 
-          ? { ...u, name, phone: fullPhone, email, address, notes, profilePicture }
-          : u
-      );
-      localStorage.setItem('users', JSON.stringify(updatedUsers));
-    }
-
+    await saveUserProfile(user.id, { name, phone: fullPhone, email, address, notes, profilePicture });
     onProfileUpdate?.(updatedUser);
     toast.success('Profile updated successfully!');
   };
@@ -59,7 +51,6 @@ export default function ProfilePage({ user, onLogout, onProfileUpdate }: Profile
 
   return (
     <div className="min-h-screen pb-24">
-      {/* Header */}
       <div className="page-hero">
         <div className="page-hero__inner">
           <Link to={backLink} className="page-back-link">
@@ -70,9 +61,7 @@ export default function ProfilePage({ user, onLogout, onProfileUpdate }: Profile
         </div>
       </div>
 
-      {/* Content */}
       <div className="max-w-4xl mx-auto px-6 py-8 space-y-6">
-        {/* Profile Picture */}
         <Card>
           <CardHeader>
             <CardTitle>Profile Picture</CardTitle>
@@ -88,20 +77,13 @@ export default function ProfilePage({ user, onLogout, onProfileUpdate }: Profile
               </div>
               <label htmlFor="profile-upload" className="absolute bottom-0 right-0 bg-white rounded-full p-2 shadow-lg cursor-pointer hover:bg-gray-50 border-2 border-orange-500">
                 <Camera className="w-5 h-5 text-orange-600" />
-                <input
-                  id="profile-upload"
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleImageUpload}
-                />
+                <input id="profile-upload" type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
               </label>
             </div>
             <p className="text-sm text-gray-600">Click camera icon to upload photo</p>
           </CardContent>
         </Card>
 
-        {/* Personal Information */}
         <Card>
           <CardHeader>
             <CardTitle>Personal Information</CardTitle>
@@ -109,12 +91,7 @@ export default function ProfilePage({ user, onLogout, onProfileUpdate }: Profile
           <CardContent className="space-y-6">
             <div className="space-y-2">
               <Label htmlFor="name" className="text-base">Full Name *</Label>
-              <Input
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="h-12 text-base"
-              />
+              <Input id="name" value={name} onChange={(e) => setName(e.target.value)} className="h-12 text-base" />
             </div>
 
             <div className="space-y-2">
@@ -132,68 +109,33 @@ export default function ProfilePage({ user, onLogout, onProfileUpdate }: Profile
                     <SelectItem value="+1">United States +1</SelectItem>
                   </SelectContent>
                 </Select>
-                <Input
-                  id="phone"
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
-                  className="flex-1 h-12 text-base"
-                />
+                <Input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))} className="flex-1 h-12 text-base" />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-base">Email (Optional)</Label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="h-12 text-base"
-              />
+              <Label htmlFor="email" className="text-base">Email</Label>
+              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-12 text-base" />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="address" className="text-base">Address (Optional)</Label>
-              <Textarea
-                id="address"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                placeholder="Enter your delivery address"
-                className="min-h-24 text-base"
-              />
+              <Textarea id="address" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Enter your delivery address" className="min-h-24 text-base" />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="notes" className="text-base">Notes (Optional)</Label>
-              <Textarea
-                id="notes"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Any special notes or preferences"
-                className="min-h-24 text-base"
-              />
+              <Textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Any special notes or preferences" className="min-h-24 text-base" />
             </div>
           </CardContent>
         </Card>
 
-        {/* Actions */}
         <div className="space-y-4">
-          <Button
-            size="lg"
-            onClick={handleSave}
-            className="w-full h-14 text-lg brand-button"
-          >
+          <Button size="lg" onClick={handleSave} className="w-full h-14 text-lg brand-button">
             <Save className="w-5 h-5 mr-2" />
             Save Changes
           </Button>
-
-          <Button
-            size="lg"
-            variant="outline"
-            onClick={onLogout}
-            className="w-full h-14 text-lg border-2"
-          >
+          <Button size="lg" variant="outline" onClick={onLogout} className="w-full h-14 text-lg border-2">
             Logout
           </Button>
         </div>

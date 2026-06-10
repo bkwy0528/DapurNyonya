@@ -3,21 +3,10 @@ import { Link } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { ArrowLeft, TrendingUp, DollarSign, ShoppingBag, Users, Calendar } from 'lucide-react';
 import { User } from '../../App';
-import { safeGetJSON } from '../../utils/storage';
+import { getOrders } from '../../utils/db';
 import {
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
+  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 
 interface AnalyticsDashboardProps {
@@ -38,7 +27,7 @@ interface AnalyticsData {
 
 const COLORS = ['#f97316', '#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6'];
 
-export default function AnalyticsDashboard({ user }: AnalyticsDashboardProps) {
+export default function AnalyticsDashboard({ user: _user }: AnalyticsDashboardProps) {
   const [analytics, setAnalytics] = useState<AnalyticsData>({
     totalRevenue: 0,
     totalOrders: 0,
@@ -55,20 +44,16 @@ export default function AnalyticsDashboard({ user }: AnalyticsDashboardProps) {
     calculateAnalytics();
   }, []);
 
-  const calculateAnalytics = () => {
-    const orders = safeGetJSON('orders', []);
-    const products = safeGetJSON('products', []);
+  const calculateAnalytics = async () => {
+    const orders = await getOrders();
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-    // Calculate total revenue and orders
-    const totalRevenue = orders.reduce((sum: number, order: any) => sum + (order.total || 0), 0);
+    const totalRevenue = orders.reduce((sum: number, o: any) => sum + (o.total || 0), 0);
     const totalOrders = orders.length;
     const pendingOrders = orders.filter((o: any) => o.status === 'Pending Approval').length;
     const completedOrders = orders.filter((o: any) => o.status === 'Delivered').length;
 
-    // Calculate monthly revenue (last 6 months)
     const monthlyData: { [key: string]: number } = {};
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    
     orders.forEach((order: any) => {
       if (order.orderDate) {
         const date = new Date(order.orderDate);
@@ -76,77 +61,47 @@ export default function AnalyticsDashboard({ user }: AnalyticsDashboardProps) {
         monthlyData[monthKey] = (monthlyData[monthKey] || 0) + (order.total || 0);
       }
     });
+    const monthlyRevenue = Object.entries(monthlyData).slice(-6).map(([month, revenue]) => ({ month, revenue }));
 
-    const monthlyRevenue = Object.entries(monthlyData)
-      .slice(-6)
-      .map(([month, revenue]) => ({ month, revenue }));
-
-    // Calculate product sales
     const productSalesMap: { [key: string]: { sales: number; revenue: number } } = {};
-    
     orders.forEach((order: any) => {
       if (order.items && Array.isArray(order.items)) {
         order.items.forEach((item: any) => {
-          if (!productSalesMap[item.name]) {
-            productSalesMap[item.name] = { sales: 0, revenue: 0 };
-          }
+          if (!productSalesMap[item.name]) productSalesMap[item.name] = { sales: 0, revenue: 0 };
           productSalesMap[item.name].sales += item.quantity;
           productSalesMap[item.name].revenue += item.price * item.quantity;
         });
       }
     });
-
     const productSales = Object.entries(productSalesMap)
       .map(([name, data]) => ({ name, sales: data.sales, revenue: data.revenue }))
       .sort((a, b) => b.revenue - a.revenue);
 
-    // Calculate status breakdown
     const statusMap: { [key: string]: number } = {};
-    orders.forEach((order: any) => {
-      statusMap[order.status] = (statusMap[order.status] || 0) + 1;
-    });
-
+    orders.forEach((order: any) => { statusMap[order.status] = (statusMap[order.status] || 0) + 1; });
     const statusBreakdown = Object.entries(statusMap).map(([name, value]) => ({ name, value }));
 
-    // Calculate recent revenue (last 30 days)
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
     const recentRevenue = orders
       .filter((o: any) => new Date(o.orderDate) >= thirtyDaysAgo)
-      .reduce((sum: number, order: any) => sum + (order.total || 0), 0);
+      .reduce((sum: number, o: any) => sum + (o.total || 0), 0);
 
-    // Calculate growth rate (simplified)
     const sixtyDaysAgo = new Date();
     sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
-    
     const previousRevenue = orders
       .filter((o: any) => {
-        const orderDate = new Date(o.orderDate);
-        return orderDate >= sixtyDaysAgo && orderDate < thirtyDaysAgo;
+        const d = new Date(o.orderDate);
+        return d >= sixtyDaysAgo && d < thirtyDaysAgo;
       })
-      .reduce((sum: number, order: any) => sum + (order.total || 0), 0);
+      .reduce((sum: number, o: any) => sum + (o.total || 0), 0);
+    const growthRate = previousRevenue > 0 ? ((recentRevenue - previousRevenue) / previousRevenue) * 100 : 0;
 
-    const growthRate = previousRevenue > 0 
-      ? ((recentRevenue - previousRevenue) / previousRevenue) * 100 
-      : 0;
-
-    setAnalytics({
-      totalRevenue,
-      totalOrders,
-      pendingOrders,
-      completedOrders,
-      monthlyRevenue,
-      productSales,
-      statusBreakdown,
-      recentRevenue,
-      growthRate,
-    });
+    setAnalytics({ totalRevenue, totalOrders, pendingOrders, completedOrders, monthlyRevenue, productSales, statusBreakdown, recentRevenue, growthRate });
   };
 
   return (
     <div className="min-h-screen pb-24">
-      {/* Header */}
       <div className="page-hero">
         <div className="max-w-7xl mx-auto">
           <Link to="/admin/dashboard" className="page-back-link">
@@ -159,7 +114,6 @@ export default function AnalyticsDashboard({ user }: AnalyticsDashboardProps) {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
-        {/* Key Metrics */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
             <CardContent className="p-6">
@@ -228,7 +182,6 @@ export default function AnalyticsDashboard({ user }: AnalyticsDashboardProps) {
           </Card>
         </div>
 
-        {/* Revenue Trend Chart */}
         {analytics.monthlyRevenue.length > 0 && (
           <Card>
             <CardHeader>
@@ -240,17 +193,8 @@ export default function AnalyticsDashboard({ user }: AnalyticsDashboardProps) {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" />
                   <YAxis />
-                  <Tooltip 
-                    formatter={(value: number) => `RM ${value.toFixed(2)}`}
-                    contentStyle={{ backgroundColor: '#fff', border: '1px solid #ccc' }}
-                  />
-                  <Area 
-                    type="monotone" 
-                    dataKey="revenue" 
-                    stroke="#f97316" 
-                    fill="#fed7aa" 
-                    strokeWidth={2}
-                  />
+                  <Tooltip formatter={(value: number) => `RM ${value.toFixed(2)}`} contentStyle={{ backgroundColor: '#fff', border: '1px solid #ccc' }} />
+                  <Area type="monotone" dataKey="revenue" stroke="#f97316" fill="#fed7aa" strokeWidth={2} />
                 </AreaChart>
               </ResponsiveContainer>
             </CardContent>
@@ -258,7 +202,6 @@ export default function AnalyticsDashboard({ user }: AnalyticsDashboardProps) {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Product Sales Chart */}
           {analytics.productSales.length > 0 && (
             <Card>
               <CardHeader>
@@ -270,13 +213,7 @@ export default function AnalyticsDashboard({ user }: AnalyticsDashboardProps) {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
                     <YAxis />
-                    <Tooltip 
-                      formatter={(value: number, name: string) => {
-                        if (name === 'revenue') return `RM ${value.toFixed(2)}`;
-                        return value;
-                      }}
-                      contentStyle={{ backgroundColor: '#fff', border: '1px solid #ccc' }}
-                    />
+                    <Tooltip formatter={(value: number, name: string) => name === 'revenue' ? `RM ${value.toFixed(2)}` : value} contentStyle={{ backgroundColor: '#fff', border: '1px solid #ccc' }} />
                     <Legend />
                     <Bar dataKey="revenue" fill="#10b981" name="Revenue (RM)" />
                   </BarChart>
@@ -285,7 +222,6 @@ export default function AnalyticsDashboard({ user }: AnalyticsDashboardProps) {
             </Card>
           )}
 
-          {/* Order Status Breakdown */}
           {analytics.statusBreakdown.length > 0 && (
             <Card>
               <CardHeader>
@@ -294,17 +230,8 @@ export default function AnalyticsDashboard({ user }: AnalyticsDashboardProps) {
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
-                    <Pie
-                      data={analytics.statusBreakdown}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={(entry) => `${entry.name}: ${entry.value}`}
-                      outerRadius={100}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {analytics.statusBreakdown.map((entry, index) => (
+                    <Pie data={analytics.statusBreakdown} cx="50%" cy="50%" labelLine={false} label={(entry) => `${entry.name}: ${entry.value}`} outerRadius={100} fill="#8884d8" dataKey="value">
+                      {analytics.statusBreakdown.map((_, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
@@ -316,7 +243,6 @@ export default function AnalyticsDashboard({ user }: AnalyticsDashboardProps) {
           )}
         </div>
 
-        {/* Product Sales Table */}
         {analytics.productSales.length > 0 && (
           <Card>
             <CardHeader>
@@ -337,9 +263,7 @@ export default function AnalyticsDashboard({ user }: AnalyticsDashboardProps) {
                       <tr key={index} className="border-b hover:bg-gray-50">
                         <td className="p-3 text-gray-900">{product.name}</td>
                         <td className="p-3 text-right text-gray-900">{product.sales}</td>
-                        <td className="p-3 text-right font-semibold text-orange-600">
-                          RM {product.revenue.toFixed(2)}
-                        </td>
+                        <td className="p-3 text-right font-semibold text-orange-600">RM {product.revenue.toFixed(2)}</td>
                       </tr>
                     ))}
                   </tbody>
