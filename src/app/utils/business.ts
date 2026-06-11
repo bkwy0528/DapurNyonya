@@ -7,12 +7,15 @@ export function validatePassword(password: string) {
 }
 
 export function generateFinalOrderNumber() {
-  const year = new Date().getFullYear();
-  const key = `orderCounter-${year}`;
-  const raw = parseInt(localStorage.getItem(key) || '0', 10) + 1;
-  localStorage.setItem(key, String(raw));
-  const seq = String(raw).padStart(4, '0');
-  return `DN-${year}-${seq}`;
+  const now = new Date();
+  const YY = String(now.getFullYear()).slice(-2);
+  const MM = String(now.getMonth() + 1).padStart(2, '0');
+  const DD = String(now.getDate()).padStart(2, '0');
+  const dayKey = `${YY}${MM}${DD}`;
+  const counterKey = `orderCounter-${dayKey}`;
+  const seq = parseInt(localStorage.getItem(counterKey) || '0', 10) + 1;
+  localStorage.setItem(counterKey, String(seq));
+  return `DN-${dayKey}${String(seq).padStart(2, '0')}`;
 }
 
 export function getMaxPrepDaysFromCart(cartItems: any[]) {

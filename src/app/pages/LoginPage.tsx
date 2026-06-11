@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router';
+import { Link } from 'react-router';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -8,12 +8,10 @@ import { ArrowLeft, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../../firebase';
-import { ADMIN_EMAIL } from '../utils/db';
 import PageContainer from '../components/ui/PageContainer';
 import FormSection from '../components/ui/FormSection';
 
 export default function LoginPage() {
-  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -29,7 +27,7 @@ export default function LoginPage() {
     try {
       await signInWithEmailAndPassword(auth, email, password);
       toast.success('Welcome back!');
-      navigate(email === ADMIN_EMAIL ? '/admin/dashboard' : '/customer/home');
+      // App.tsx route redirects once onAuthStateChanged updates user state
     } catch (err: any) {
       const code = err.code as string;
       if (code === 'auth/user-not-found' || code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
@@ -37,7 +35,6 @@ export default function LoginPage() {
       } else {
         toast.error('Login failed. Please try again.');
       }
-    } finally {
       setLoading(false);
     }
   };

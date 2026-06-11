@@ -101,8 +101,8 @@ function App() {
           <Routes>
             {/* Public Routes */}
             <Route path="/" element={<WelcomePage />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
+            <Route path="/login" element={user ? <Navigate to={user.role === 'admin' ? '/admin/dashboard' : '/customer/home'} replace /> : <LoginPage />} />
+            <Route path="/register" element={user ? <Navigate to="/customer/home" replace /> : <RegisterPage onRegisterSuccess={(u) => setUser(u)} />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
             {/* Customer Routes */}

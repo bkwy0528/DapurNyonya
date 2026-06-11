@@ -3,7 +3,7 @@ import { Link } from 'react-router';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
-import { ShoppingCart, Calendar, Package, User, TrendingUp, Clock, BarChart, ChefHat } from 'lucide-react';
+import { ShoppingCart, Calendar, User, TrendingUp, Clock } from 'lucide-react';
 import { User as UserType } from '../../App';
 import { getOrders, getAdminProfile } from '../../utils/db';
 
@@ -73,13 +73,6 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
     { title: 'Total Revenue', value: `RM ${stats.totalRevenue.toFixed(2)}`, icon: TrendingUp, bgColor: 'bg-green-50', textColor: 'text-green-600' },
   ];
 
-  const quickActions = [
-    { label: 'Manage Orders', icon: ShoppingCart, to: '/admin/orders', color: 'bg-blue-500 hover:bg-blue-600' },
-    { label: 'Production Schedule', icon: ChefHat, to: '/admin/schedule', color: 'bg-orange-500 hover:bg-orange-600' },
-    { label: 'Ingredients', icon: Package, to: '/admin/ingredients', color: 'bg-green-500 hover:bg-green-600' },
-    { label: 'Analytics', icon: BarChart, to: '/admin/analytics', color: 'bg-purple-500 hover:bg-purple-600' },
-  ];
-
   return (
     <div className="min-h-screen pb-24">
       <div className="brand-gradient text-white p-6 pb-8">
@@ -117,24 +110,6 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
               </Card>
             );
           })}
-        </div>
-
-        {/* Quick Actions */}
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {quickActions.map((action) => {
-              const Icon = action.icon;
-              return (
-                <Link key={action.label} to={action.to}>
-                  <button className={`w-full ${action.color} text-white rounded-xl p-5 flex flex-col items-center gap-3 transition-colors`}>
-                    <Icon className="w-7 h-7" />
-                    <span className="text-sm font-medium text-center">{action.label}</span>
-                  </button>
-                </Link>
-              );
-            })}
-          </div>
         </div>
 
         {/* Recent Orders */}

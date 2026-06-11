@@ -113,11 +113,8 @@ export default function AdminProfilePage({ user, onLogout, onProfileUpdate }: Ad
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="+60">Malaysia +60</SelectItem>
-                    <SelectItem value="+65">Singapore +65</SelectItem>
-                    <SelectItem value="+62">Indonesia +62</SelectItem>
-                    <SelectItem value="+66">Thailand +66</SelectItem>
-                    <SelectItem value="+1">United States +1</SelectItem>
+                      <SelectItem value="+60">+60 (Malaysia)</SelectItem>
+                      <SelectItem value="+65">+65 (Singapore)</SelectItem>
                   </SelectContent>
                 </Select>
                 <Input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))} className="flex-1 h-12 text-base" />

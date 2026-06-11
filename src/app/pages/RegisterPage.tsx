@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router';
+import { Link } from 'react-router';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -11,11 +11,15 @@ import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../../firebase';
 import { saveUserProfile } from '../utils/db';
 import { validatePassword } from '../utils/business';
+import { User } from '../App';
 import PageContainer from '../components/ui/PageContainer';
 import FormSection from '../components/ui/FormSection';
 
-export default function RegisterPage() {
-  const navigate = useNavigate();
+interface RegisterPageProps {
+  onRegisterSuccess?: (user: User) => void;
+}
+
+export default function RegisterPage({ onRegisterSuccess }: RegisterPageProps) {
   const [name, setName] = useState('');
   const [countryCode, setCountryCode] = useState('+60');
   const [phone, setPhone] = useState('');
@@ -58,8 +62,9 @@ export default function RegisterPage() {
         email,
         role: 'customer',
       });
+      onRegisterSuccess?.({ id: uid, name, phone: fullPhone, email, role: 'customer' });
       toast.success('Registration successful!');
-      navigate('/customer/home');
+      // App.tsx route redirects to /customer/home once user state is set
     } catch (err: any) {
       const code = err.code as string;
       if (code === 'auth/email-already-in-use') {
@@ -67,7 +72,6 @@ export default function RegisterPage() {
       } else {
         toast.error('Registration failed. Please try again.');
       }
-    } finally {
       setLoading(false);
     }
   };
@@ -97,19 +101,19 @@ export default function RegisterPage() {
 
               <FormSection>
                 <Label htmlFor="phone" className="text-base">Phone Number *</Label>
-                <div className="grid grid-cols-[110px_1fr] gap-2 sm:grid-cols-[120px_1fr] items-stretch">
+                <div className="flex gap-2 items-center">
                   <Select value={countryCode} onValueChange={setCountryCode}>
-                    <SelectTrigger className="h-14 text-base rounded-xl">
+                    <SelectTrigger className="w-32 h-12 text-base shrink-0">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="+60">🇲🇾 +60 (Malaysia)</SelectItem>
-                      <SelectItem value="+65">🇸🇬 +65 (Singapore)</SelectItem>
+                      <SelectItem value="+60">+60 (Malaysia)</SelectItem>
+                      <SelectItem value="+65">+65 (Singapore)</SelectItem>
                     </SelectContent>
                   </Select>
                   <div className="relative flex-1">
                     <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <Input id="phone" type="tel" placeholder="123456789" value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))} className="pl-12 text-base rounded-xl" required />
+                    <Input id="phone" type="tel" placeholder="123456789" value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))} className="h-12 pl-12 text-base" required />
                   </div>
                 </div>
                 <p className="text-xs text-gray-500">Enter phone number without country code</p>
