@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router';
 import { Button } from './button';
-import { ShoppingCart, User, Menu, Package, BarChart, Calendar, Settings, House, ShoppingBag, UserCircle } from 'lucide-react';
+import { ShoppingCart, User, Menu, Package, BarChart, Calendar, Settings, House, ShoppingBag, UserCircle, Wheat } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { useState } from 'react';
 
@@ -23,6 +23,7 @@ export default function Header({ user, onLogout }: { user: any; onLogout?: () =>
     { to: '/admin/orders', label: 'Orders', icon: ShoppingBag },
     { to: '/admin/products', label: 'Products', icon: Package },
     { to: '/admin/schedule', label: 'Schedule', icon: Calendar },
+    { to: '/admin/ingredients', label: 'Ingredients', icon: Wheat },
     { to: '/admin/analytics', label: 'Analytics', icon: BarChart },
     { to: '/admin/settings', label: 'Settings', icon: Settings },
     { to: '/admin/profile', label: 'Profile', icon: UserCircle },

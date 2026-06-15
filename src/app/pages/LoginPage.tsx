@@ -53,7 +53,7 @@ export default function LoginPage() {
             <CardDescription className="text-center text-base">Login to place orders or manage your business</CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit}>
-            <CardContent>
+            <CardContent className="space-y-6">
               <FormSection>
                 <Label htmlFor="email" className="text-base">Email Address</Label>
                 <div className="relative">

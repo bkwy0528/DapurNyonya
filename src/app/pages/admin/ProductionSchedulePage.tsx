@@ -6,6 +6,7 @@ import { Input } from '../../components/ui/input';
 import { Button } from '../../components/ui/button';
 import { Calendar as CalendarIcon, ArrowLeft, Clock, ChefHat, Package, AlertCircle } from 'lucide-react';
 import { User } from '../../App';
+import { getStatusStyle } from '../../utils/statusStyles';
 import { Calendar } from '../../components/ui/calendar';
 import { getOrders, getDailyLimits, saveDailyLimit, clearDailyLimit } from '../../utils/db';
 
@@ -134,7 +135,7 @@ export default function ProductionSchedulePage({ user: _user }: ProductionSchedu
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-6 py-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
         <Card className="overflow-hidden border-0 shadow-lg bg-white/95">
           <CardHeader className="brand-subtle-header">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -239,7 +240,7 @@ export default function ProductionSchedulePage({ user: _user }: ProductionSchedu
                                 <p className="font-semibold text-gray-900">{getOrderLabel(order)}</p>
                                 <p className="text-sm text-gray-600">{order.customerName}</p>
                               </div>
-                              <Badge className={order.status === 'Pending Approval' ? 'bg-yellow-100 text-yellow-700' : order.status === 'Order Received' ? 'bg-blue-100 text-blue-700' : order.status === 'In Preparation' ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'}>
+                              <Badge className={getStatusStyle(order.status)}>
                                 {order.status}
                               </Badge>
                             </div>

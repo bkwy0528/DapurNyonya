@@ -1,0 +1,49 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email == 'yikbryan0528work@gmail.com';
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Products: anyone can read, only admin can write
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Orders: customers can create + read their own, admin can read/write all
+    match /orders/{orderId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.customerId == request.auth.uid);
+      allow create: if isSignedIn() && request.resource.data.customerId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // Settings: anyone can read (business hours / delivery info shown to customers), only admin writes
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Daily limits: anyone can read (to check availability), only admin writes
+    match /dailyLimits/{dateKey} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // User profiles: users can read/write their own, admin can read all
+    match /users/{uid} {
+      allow read, write: if isSignedIn() && request.auth.uid == uid;
+      allow read: if isAdmin();
+    }
+
+    // Admin profile: admin only
+    match /adminProfile/{docId} {
+      allow read, write: if isAdmin();
+    }
+  }
+}

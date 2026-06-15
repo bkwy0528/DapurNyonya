@@ -6,19 +6,11 @@ import { Badge } from '../../components/ui/badge';
 import { ShoppingCart, Calendar, User, TrendingUp, Clock } from 'lucide-react';
 import { User as UserType } from '../../App';
 import { getOrders, getAdminProfile } from '../../utils/db';
+import { getStatusStyle } from '../../utils/statusStyles';
 
 interface AdminDashboardProps {
   user: UserType;
 }
-
-const STATUS_STYLES: Record<string, string> = {
-  'Pending Approval': 'bg-yellow-100 text-yellow-700',
-  'Order Received': 'bg-blue-100 text-blue-700',
-  'In Preparation': 'bg-orange-100 text-orange-700',
-  'Ready for Pickup': 'bg-green-100 text-green-700',
-  'Delivered': 'bg-gray-100 text-gray-700',
-  'Rejected': 'bg-red-100 text-red-700',
-};
 
 export default function AdminDashboard({ user }: AdminDashboardProps) {
   const [stats, setStats] = useState({
@@ -75,7 +67,7 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
 
   return (
     <div className="min-h-screen pb-24">
-      <div className="brand-gradient text-white p-6 pb-8">
+      <div className="page-hero pb-8">
         <div className="page-hero__inner page-hero__inner--wide">
           <div className="flex items-center space-x-4 mb-2">
             <div className="w-14 h-14 bg-white bg-opacity-20 rounded-full flex items-center justify-center overflow-hidden">
@@ -93,7 +85,7 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-6 py-8 space-y-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-8">
         {/* Stat Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {statCards.map((card) => {
@@ -137,7 +129,7 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="font-semibold text-orange-600">RM {(order.total || 0).toFixed(2)}</span>
-                      <Badge className={STATUS_STYLES[order.status] || 'bg-gray-100 text-gray-700'}>
+                      <Badge className={getStatusStyle(order.status)}>
                         {order.status}
                       </Badge>
                     </div>

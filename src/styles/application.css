@@ -114,4 +114,50 @@
   .brand-subtle-header {
     @apply border-b border-gray-100 bg-gradient-to-r from-orange-50 to-amber-50;
   }
+
+  /* Shared status badge colour utilities — used across admin and customer order views */
+  .status-badge--pending {
+    @apply bg-yellow-100 text-yellow-700;
+  }
+
+  .status-badge--received {
+    @apply bg-blue-100 text-blue-700;
+  }
+
+  .status-badge--preparing {
+    @apply bg-orange-100 text-orange-700;
+  }
+
+  .status-badge--ready {
+    @apply bg-green-100 text-green-700;
+  }
+
+  .status-badge--delivered {
+    @apply bg-gray-100 text-gray-700;
+  }
+
+  .status-badge--rejected {
+    @apply bg-red-100 text-red-700;
+  }
+
+  .install-prompt {
+    @apply fixed inset-x-4 bottom-4 z-[60] mx-auto flex max-w-md items-center gap-3 rounded-lg border border-orange-200 bg-white p-3 shadow-xl;
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+  }
+
+  .install-prompt__copy {
+    @apply min-w-0 flex-1;
+  }
+
+  .install-prompt__title {
+    @apply text-sm font-semibold text-gray-900;
+  }
+
+  .install-prompt__text {
+    @apply text-xs text-gray-600;
+  }
+
+  .install-prompt__close {
+    @apply h-8 w-8 shrink-0;
+  }
 }

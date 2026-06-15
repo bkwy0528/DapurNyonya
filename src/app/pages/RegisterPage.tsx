@@ -90,7 +90,7 @@ export default function RegisterPage({ onRegisterSuccess }: RegisterPageProps) {
             <CardDescription className="text-center text-base">Join us to order delicious homemade treats</CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit}>
-            <CardContent>
+            <CardContent className="space-y-6">
               <FormSection>
                 <Label htmlFor="name" className="text-base">Full Name *</Label>
                 <div className="relative">

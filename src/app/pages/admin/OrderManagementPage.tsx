@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { User } from '../../App';
 import { generateFinalOrderNumber } from '../../utils/business';
 import { getOrders, updateOrderFields } from '../../utils/db';
+import { getStatusStyle } from '../../utils/statusStyles';
 
 interface OrderManagementPageProps {
   user: User;
@@ -68,17 +69,6 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
     setOrderToReject(null);
   };
 
-  const getStatusColor = (status: string) => {
-    const map: Record<string, string> = {
-      'Pending Approval': 'bg-yellow-100 text-yellow-700',
-      'Order Received': 'bg-blue-100 text-blue-700',
-      'In Preparation': 'bg-orange-100 text-orange-700',
-      'Ready for Pickup': 'bg-green-100 text-green-700',
-      'Delivered': 'bg-gray-100 text-gray-700',
-      'Rejected': 'bg-red-100 text-red-700',
-    };
-    return map[status] || 'bg-gray-100 text-gray-700';
-  };
 
   const getOrderLabel = (order: any) => order.finalizedNumber || `Order #${order.id.slice(-6)}`;
 
@@ -94,7 +84,7 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-6 py-6">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
         <Card>
           <CardContent className="p-6">
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
@@ -119,7 +109,7 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
         </Card>
       </div>
 
-      <div className="max-w-6xl mx-auto px-6 space-y-4 pb-6">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 space-y-4 pb-6">
         {filteredOrders.length === 0 ? (
           <Card><CardContent className="p-12 text-center"><p className="text-gray-600 text-lg">No orders found</p></CardContent></Card>
         ) : (
@@ -134,7 +124,7 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
                       Order Date: {new Date(order.orderDate || Date.now()).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                     </p>
                   </div>
-                  <Badge className={getStatusColor(order.status)}>{order.status}</Badge>
+                  <Badge className={getStatusStyle(order.status)}>{order.status}</Badge>
                 </div>
               </CardHeader>
               <CardContent className="p-6 space-y-4">

@@ -48,7 +48,7 @@ export default function AnalyticsDashboard({ user: _user }: AnalyticsDashboardPr
     const orders = await getOrders();
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-    const totalRevenue = orders.reduce((sum: number, o: any) => sum + (o.total || 0), 0);
+    const totalRevenue = orders.filter((o: any) => o.status !== 'Rejected').reduce((sum: number, o: any) => sum + (o.total || 0), 0);
     const totalOrders = orders.length;
     const pendingOrders = orders.filter((o: any) => o.status === 'Pending Approval').length;
     const completedOrders = orders.filter((o: any) => o.status === 'Delivered').length;
@@ -84,7 +84,7 @@ export default function AnalyticsDashboard({ user: _user }: AnalyticsDashboardPr
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const recentRevenue = orders
-      .filter((o: any) => new Date(o.orderDate) >= thirtyDaysAgo)
+      .filter((o: any) => o.status !== 'Rejected' && new Date(o.orderDate) >= thirtyDaysAgo)
       .reduce((sum: number, o: any) => sum + (o.total || 0), 0);
 
     const sixtyDaysAgo = new Date();
@@ -103,7 +103,7 @@ export default function AnalyticsDashboard({ user: _user }: AnalyticsDashboardPr
   return (
     <div className="min-h-screen pb-24">
       <div className="page-hero">
-        <div className="max-w-7xl mx-auto">
+        <div className="page-hero__inner page-hero__inner--wide">
           <Link to="/admin/dashboard" className="page-back-link">
             <ArrowLeft className="w-5 h-5 mr-2" />
             <span className="text-lg">Back to Dashboard</span>
@@ -113,7 +113,7 @@ export default function AnalyticsDashboard({ user: _user }: AnalyticsDashboardPr
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
             <CardContent className="p-6">

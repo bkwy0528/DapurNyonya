@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router';
 import { Card, CardContent } from '../../components/ui/card';
+import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
@@ -142,7 +143,7 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-6">
         <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) resetForm(); }}>
           <DialogTrigger asChild>
             <Button size="lg" className="success-button">
@@ -236,9 +237,9 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
                         <h3 className="text-xl font-semibold text-gray-900">{product.name}</h3>
                         <p className="text-gray-600 mt-1">{product.description}</p>
                       </div>
-                      <span className={`px-3 py-1 rounded-full text-sm ${product.available ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
+                      <Badge className={product.available ? 'bg-green-100 text-green-700 hover:bg-green-100' : 'bg-gray-100 text-gray-700 hover:bg-gray-100'}>
                         {product.available ? 'Available' : 'Unavailable'}
-                      </span>
+                      </Badge>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>

@@ -6,6 +6,8 @@ import { Progress } from '../../components/ui/progress';
 import { ArrowLeft, Package, Clock, Truck, AlertCircle } from 'lucide-react';
 import { User } from '../../App';
 import { getOrdersByCustomer } from '../../utils/db';
+import { getStatusStyle } from '../../utils/statusStyles';
+import { Button } from '../../components/ui/button';
 
 interface CustomerOrderTrackingPageProps {
   user: User;
@@ -38,18 +40,6 @@ export default function CustomerOrderTrackingPage({ user }: CustomerOrderTrackin
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Pending Approval': return 'bg-yellow-100 text-yellow-700';
-      case 'Order Received': return 'bg-blue-100 text-blue-700';
-      case 'In Preparation': return 'bg-orange-100 text-orange-700';
-      case 'Ready for Pickup':
-      case 'Delivered': return 'bg-green-100 text-green-700';
-      case 'Rejected': return 'bg-red-100 text-red-700';
-      default: return 'bg-gray-100 text-gray-700';
-    }
-  };
-
   const getOrderLabel = (order: any) => order.finalizedNumber || `Order #${order.id.slice(-6)}`;
 
   return (
@@ -64,7 +54,7 @@ export default function CustomerOrderTrackingPage({ user }: CustomerOrderTrackin
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-6 py-8">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
         {orders.length === 0 ? (
           <Card>
             <CardContent className="p-12 text-center">
@@ -72,7 +62,7 @@ export default function CustomerOrderTrackingPage({ user }: CustomerOrderTrackin
               <h3 className="text-xl font-semibold text-gray-700 mb-2">No orders yet</h3>
               <p className="text-gray-600 mb-6">Start ordering delicious festive treats!</p>
               <Link to="/customer/home">
-                <button className="brand-button rounded-lg px-6 py-3 text-white">Browse Products</button>
+                <Button className="brand-button">Browse Products</Button>
               </Link>
             </CardContent>
           </Card>
@@ -85,7 +75,7 @@ export default function CustomerOrderTrackingPage({ user }: CustomerOrderTrackin
                   <CardHeader className="bg-gray-50">
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-lg">{getOrderLabel(order)}</CardTitle>
-                      <Badge className={getStatusColor(order.status)}>{order.status}</Badge>
+                      <Badge className={getStatusStyle(order.status)}>{order.status}</Badge>
                     </div>
                     <p className="text-sm text-gray-600 mt-2">
                       Placed on {new Date(order.orderDate || order.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}

@@ -11,11 +11,10 @@ export function generateFinalOrderNumber() {
   const YY = String(now.getFullYear()).slice(-2);
   const MM = String(now.getMonth() + 1).padStart(2, '0');
   const DD = String(now.getDate()).padStart(2, '0');
-  const dayKey = `${YY}${MM}${DD}`;
-  const counterKey = `orderCounter-${dayKey}`;
-  const seq = parseInt(localStorage.getItem(counterKey) || '0', 10) + 1;
-  localStorage.setItem(counterKey, String(seq));
-  return `DN-${dayKey}${String(seq).padStart(2, '0')}`;
+  // Use random 4-char suffix instead of localStorage counter to avoid
+  // duplicate numbers when admin switches devices or clears browser data.
+  const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
+  return `DN-${YY}${MM}${DD}-${suffix}`;
 }
 
 export function getMaxPrepDaysFromCart(cartItems: any[]) {

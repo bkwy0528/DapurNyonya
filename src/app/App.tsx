@@ -6,6 +6,7 @@ import Header from './components/ui/header';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from '../firebase';
 import { ADMIN_EMAIL, getAdminProfile, getUserProfile, getProducts, seedDefaultProducts } from './utils/db';
+import InstallAppPrompt from './components/pwa/InstallAppPrompt';
 
 // Import Pages
 import WelcomePage from './pages/WelcomePage';
@@ -151,6 +152,7 @@ function App() {
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          <InstallAppPrompt />
           <Toaster />
         </div>
       </BrowserRouter>

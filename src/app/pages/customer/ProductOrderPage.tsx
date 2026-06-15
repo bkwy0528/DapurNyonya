@@ -52,7 +52,7 @@ export default function ProductOrderPage({ user: _user }: ProductOrderPageProps)
 
   return (
     <PageContainer>
-      <div className="bg-gradient-to-r from-orange-500 to-amber-500 text-white p-6 rounded-b-xl">
+      <div className="page-hero page-hero--rounded">
         <Link to="/customer/home" className="inline-flex items-center text-white hover:text-gray-100 mb-2">
           <ArrowLeft className="w-5 h-5 mr-2" />
           <span className="text-lg">Back to Products</span>

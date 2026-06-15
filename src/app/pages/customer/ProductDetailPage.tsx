@@ -57,7 +57,7 @@ export default function ProductDetailPage({ user: _user }: ProductDetailPageProp
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-6 py-8 space-y-6">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-6">
         <Card className="overflow-hidden">
           <div className="aspect-video w-full overflow-hidden bg-gray-100">
             <img src={product.image} alt={product.name} className="w-full h-full object-cover" />

@@ -33,7 +33,7 @@ export default function CustomerHomePage({ user }: CustomerHomePageProps) {
 
   return (
     <div className="min-h-screen pb-12">
-      <div className="brand-gradient text-white p-6 pb-8">
+      <div className="page-hero pb-8">
         <div className="page-hero__inner">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-3">
@@ -54,7 +54,7 @@ export default function CustomerHomePage({ user }: CustomerHomePageProps) {
       </div>
 
       {announcement.enabled && (
-        <div className="max-w-4xl mx-auto px-6 -mt-4">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 -mt-4">
           <Card className="bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 shadow-lg">
             <CardContent className="p-5">
               <div className="flex items-start space-x-3">
@@ -71,7 +71,7 @@ export default function CustomerHomePage({ user }: CustomerHomePageProps) {
         </div>
       )}
 
-      <div className="max-w-4xl mx-auto px-6 py-8">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
         <div className="mb-6">
           <h2 className="text-2xl font-semibold text-gray-900">Available Products</h2>
           <p className="text-sm text-gray-600 mt-1">Use the top navigation for cart, orders, and profile access.</p>

@@ -37,7 +37,7 @@ export default function CartPage({ user }: CartPageProps) {
         </div>
 
         {/* Empty State */}
-        <div className="max-w-4xl mx-auto px-6 py-16">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-16">
           <div className="text-center">
             <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
               <ShoppingCart className="w-12 h-12 text-gray-400" />
@@ -70,7 +70,7 @@ export default function CartPage({ user }: CartPageProps) {
       </div>
 
       {/* Cart Items */}
-      <div className="max-w-4xl mx-auto px-6 py-8 space-y-6">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-6">
         <div className="space-y-4">
           {cartItems.map((item) => (
             <Card key={item.productId}>
