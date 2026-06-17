@@ -132,6 +132,33 @@
     @apply bg-red-100 text-red-700;
   }
 
+  /* Product availability badges — separate from order status badges */
+  .status-badge--available {
+    @apply bg-green-100 text-green-700 hover:bg-green-100;
+  }
+
+  .status-badge--unavailable {
+    @apply bg-gray-100 text-gray-700 hover:bg-gray-100;
+  }
+
+  /* Contextual highlight boxes — used throughout order and admin views */
+  .info-box {
+    @apply bg-blue-50 border border-blue-200 rounded-lg p-4;
+  }
+
+  .warning-box {
+    @apply bg-yellow-50 border border-yellow-200 rounded-lg p-4;
+  }
+
+  .alert-box {
+    @apply bg-red-50 border border-red-200 rounded-lg p-4;
+  }
+
+  /* Neutral detail block for read-only content sections */
+  .detail-box {
+    @apply bg-gray-50 rounded-lg p-4;
+  }
+
   .install-prompt {
     @apply fixed inset-x-4 bottom-4 z-[60] mx-auto flex max-w-md items-center gap-3 rounded-lg border border-orange-200 bg-white p-3 shadow-xl;
     padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));

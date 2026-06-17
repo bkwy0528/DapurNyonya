@@ -43,7 +43,7 @@ export default function OrderSummaryPage({ user }: OrderSummaryPageProps) {
   if (!orderData) return null;
 
   return (
-    <div className="min-h-screen pb-6">
+    <div className="min-h-screen pb-24">
       <div className="page-hero">
         <div className="page-hero__inner">
           <Link to="/customer/home" className="page-back-link">

@@ -15,6 +15,16 @@ import { toast } from 'sonner';
 
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string);
 
+const stripeAppearance = {
+  theme: 'stripe' as const,
+  variables: {
+    colorPrimary: '#f97316',
+    colorBackground: '#ffffff',
+    colorText: '#1f2937',
+    borderRadius: '8px',
+  },
+};
+
 // ─── Inner form (must live inside <Elements>) ─────────────────────────────────
 
 interface PaymentFormProps {
@@ -170,16 +180,6 @@ export default function StripePaymentPage({ user }: StripePaymentPageProps) {
 
   if (!clientSecret || !pendingOrder) return <LoadingSpinner />;
 
-  const appearance = {
-    theme: 'stripe' as const,
-    variables: {
-      colorPrimary: '#f97316',
-      colorBackground: '#ffffff',
-      colorText: '#1f2937',
-      borderRadius: '8px',
-    },
-  };
-
   return (
     <div className="min-h-screen pb-24">
       <div className="page-hero page-hero--rounded">
@@ -226,7 +226,7 @@ export default function StripePaymentPage({ user }: StripePaymentPageProps) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <Elements stripe={stripePromise} options={{ clientSecret, appearance }}>
+            <Elements stripe={stripePromise} options={{ clientSecret, appearance: stripeAppearance }}>
               <PaymentForm pendingOrder={pendingOrder} user={user} onSuccess={handleSuccess} />
             </Elements>
           </CardContent>

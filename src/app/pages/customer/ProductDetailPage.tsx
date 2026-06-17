@@ -7,6 +7,7 @@ import { ArrowLeft, ShoppingCart, Package } from 'lucide-react';
 import { User } from '../../App';
 import { useCart } from '../../context/CartContext';
 import { toast } from 'sonner';
+import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { getProducts } from '../../utils/db';
 
 interface ProductDetailPageProps {
@@ -27,11 +28,7 @@ export default function ProductDetailPage({ user: _user }: ProductDetailPageProp
   }, [productId]);
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="w-10 h-10 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   if (!product) {
@@ -46,7 +43,7 @@ export default function ProductDetailPage({ user: _user }: ProductDetailPageProp
   }
 
   return (
-    <div className="min-h-screen pb-6">
+    <div className="min-h-screen pb-24">
       <div className="page-hero">
         <div className="page-hero__inner">
           <Link to="/customer/home" className="page-back-link">
@@ -68,7 +65,7 @@ export default function ProductDetailPage({ user: _user }: ProductDetailPageProp
               <div className="flex flex-col sm:flex-row items-start justify-between mb-3 gap-3">
                 <h2 className="text-2xl sm:text-3xl font-semibold text-gray-900">{product.name}</h2>
                 {product.available && (
-                  <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Available</Badge>
+                  <Badge className="status-badge--available">Available</Badge>
                 )}
               </div>
               <p className="text-gray-600 text-base sm:text-lg leading-relaxed">{product.description}</p>
@@ -100,7 +97,7 @@ export default function ProductDetailPage({ user: _user }: ProductDetailPageProp
               </div>
             </div>
 
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="info-box">
               <h4 className="font-semibold text-blue-900 mb-2">Order Information</h4>
               <ul className="text-sm text-blue-800 space-y-1">
                 <li>- Minimum {product.prepDays || 3} days advance notice required</li>

@@ -131,7 +131,7 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
                 <div className="space-y-3">
                   <h4 className="font-semibold text-gray-900">Order Items:</h4>
                   {order.items && order.items.map((item: any, idx: number) => (
-                    <div key={idx} className="flex items-start space-x-4 bg-gray-50 rounded-lg p-4">
+                    <div key={idx} className="flex items-start space-x-4 detail-box">
                       {item.image && <img src={item.image} alt={item.name} className="w-20 h-20 rounded-lg object-cover flex-shrink-0" />}
                       <div className="flex-1">
                         <h5 className="font-semibold text-gray-900">{item.name}</h5>
@@ -144,7 +144,7 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
                   ))}
                 </div>
 
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2">
+                <div className="info-box space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-gray-700">Subtotal:</span>
                     <span className="font-semibold">RM {(order.subtotal || 0).toFixed(2)}</span>
@@ -160,11 +160,11 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
                 </div>
 
                 <div className="grid sm:grid-cols-2 gap-4">
-                  <div className="bg-gray-50 rounded-lg p-4">
+                  <div className="detail-box">
                     <p className="text-sm text-gray-600 mb-1">Delivery Method:</p>
                     <p className="font-semibold text-gray-900">{order.deliveryMethod === 'delivery' ? 'Delivery' : 'Pickup'}</p>
                   </div>
-                  <div className="bg-gray-50 rounded-lg p-4">
+                  <div className="detail-box">
                     <p className="text-sm text-gray-600 mb-1">Delivery Date:</p>
                     <p className="font-semibold text-gray-900">
                       {order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) : 'Not specified'}
@@ -173,7 +173,7 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
                 </div>
 
                 <div className="grid sm:grid-cols-2 gap-4">
-                  <div className="bg-gray-50 rounded-lg p-4">
+                  <div className="detail-box">
                     <p className="text-sm text-gray-600 mb-1">Payment Method:</p>
                     <p className="font-semibold text-gray-900">
                       {({'cash':'Cash','tng':"Touch 'n Go eWallet",'duitnow':'DuitNow QR','debit':'Bank Transfer','card':'Credit/Debit Card','ewallet':'eWallet'} as Record<string,string>)[order.paymentMethod] || order.paymentMethod || '—'}
@@ -185,7 +185,7 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
                       <p className="font-semibold font-mono text-orange-800">{order.transferReference}</p>
                     </div>
                   ) : (
-                    <div className="bg-gray-50 rounded-lg p-4">
+                    <div className="detail-box">
                       <p className="text-sm text-gray-600 mb-1">Transaction Reference:</p>
                       <p className="text-gray-400 text-sm">{order.paymentMethod === 'cash' || order.paymentMethod === 'card' ? 'N/A' : 'Not provided'}</p>
                     </div>
@@ -193,14 +193,14 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
                 </div>
 
                 {order.paymentNote && (
-                  <div className="bg-gray-50 rounded-lg p-4">
+                  <div className="detail-box">
                     <p className="text-sm text-gray-600 mb-1">Payment Note:</p>
                     <p className="text-gray-900">{order.paymentNote}</p>
                   </div>
                 )}
 
                 {order.deliveryMethod === 'delivery' && order.deliveryAddress && (
-                  <div className="bg-gray-50 rounded-lg p-4">
+                  <div className="detail-box">
                     <p className="text-sm text-gray-600 mb-1">Delivery Address:</p>
                     <p className="text-gray-900">{order.deliveryAddress}</p>
                     {order.postalCode && <p className="text-gray-600 mt-1">Postal Code: {order.postalCode}</p>}
@@ -208,7 +208,7 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
                 )}
 
                 {order.specialInstructions && (
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <div className="warning-box">
                     <p className="text-sm text-gray-600 mb-1">Special Instructions:</p>
                     <p className="text-gray-900">{order.specialInstructions}</p>
                   </div>
@@ -251,7 +251,7 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
                   </Button>
                 </div>
                 {order.adminNotes && (
-                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  <div className="detail-box border border-gray-200">
                     <p className="text-sm text-gray-600 mb-1">Admin Notes:</p>
                     <p className="text-gray-900">{order.adminNotes}</p>
                   </div>

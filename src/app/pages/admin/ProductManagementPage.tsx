@@ -237,7 +237,7 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
                         <h3 className="text-xl font-semibold text-gray-900">{product.name}</h3>
                         <p className="text-gray-600 mt-1">{product.description}</p>
                       </div>
-                      <Badge className={product.available ? 'bg-green-100 text-green-700 hover:bg-green-100' : 'bg-gray-100 text-gray-700 hover:bg-gray-100'}>
+                      <Badge className={product.available ? 'status-badge--available' : 'status-badge--unavailable'}>
                         {product.available ? 'Available' : 'Unavailable'}
                       </Badge>
                     </div>

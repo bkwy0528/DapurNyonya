@@ -10,6 +10,7 @@ import { User } from '../../App';
 import { useCart } from '../../context/CartContext';
 import PageContainer from '../../components/ui/PageContainer';
 import FormSection from '../../components/ui/FormSection';
+import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { getProducts } from '../../utils/db';
 
 interface ProductOrderPageProps {
@@ -33,11 +34,7 @@ export default function ProductOrderPage({ user: _user }: ProductOrderPageProps)
   }, [productId]);
 
   if (!product) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="w-10 h-10 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   const handleQuantityChange = (delta: number) => setQuantity(Math.max(1, quantity + delta));
@@ -53,7 +50,7 @@ export default function ProductOrderPage({ user: _user }: ProductOrderPageProps)
   return (
     <PageContainer>
       <div className="page-hero page-hero--rounded">
-        <Link to="/customer/home" className="inline-flex items-center text-white hover:text-gray-100 mb-2">
+        <Link to="/customer/home" className="page-back-link">
           <ArrowLeft className="w-5 h-5 mr-2" />
           <span className="text-lg">Back to Products</span>
         </Link>
@@ -96,7 +93,7 @@ export default function ProductOrderPage({ user: _user }: ProductOrderPageProps)
               <Textarea id="notes" placeholder="Any special requests or dietary requirements?" value={notes} onChange={(e) => setNotes(e.target.value)} className="min-h-32 text-base" />
             </FormSection>
 
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="info-box">
               <p className="text-sm text-blue-900"><strong>Note:</strong> You can select your preferred pickup/delivery date during checkout.</p>
             </div>
 
@@ -105,7 +102,7 @@ export default function ProductOrderPage({ user: _user }: ProductOrderPageProps)
                 <span className="text-lg font-semibold text-gray-900">Total Amount</span>
                 <span className="text-3xl font-bold text-orange-600">RM {totalPrice.toFixed(2)}</span>
               </div>
-              <Button size="lg" onClick={handleAddToCart} className="w-full text-lg bg-gradient-to-r from-green-500 to-emerald-500">
+              <Button size="lg" onClick={handleAddToCart} className="w-full text-lg success-button">
                 <ShoppingCart className="w-5 h-5 mr-2" />Add to Cart
               </Button>
             </div>

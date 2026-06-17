@@ -32,7 +32,7 @@ export default function CustomerHomePage({ user }: CustomerHomePageProps) {
   }, []);
 
   return (
-    <div className="min-h-screen pb-12">
+    <div className="min-h-screen pb-24">
       <div className="page-hero pb-8">
         <div className="page-hero__inner">
           <div className="flex items-center justify-between mb-6">
@@ -91,7 +91,7 @@ export default function CustomerHomePage({ user }: CustomerHomePageProps) {
                       <p className="text-gray-600">{product.description}</p>
                     </div>
                     {product.available && (
-                      <Badge className="bg-green-100 text-green-700 hover:bg-green-100 ml-3">Available</Badge>
+                      <Badge className="status-badge--available ml-3">Available</Badge>
                     )}
                   </div>
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mt-4 gap-3">
