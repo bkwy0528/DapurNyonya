@@ -6,7 +6,7 @@ import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
 import { Button } from '../../components/ui/button';
 import { Switch } from '../../components/ui/switch';
-import { ArrowLeft, Settings, Save } from 'lucide-react';
+import { ArrowLeft, Settings, Save, QrCode } from 'lucide-react';
 import { toast } from 'sonner';
 import { User } from '../../App';
 import { getSettings, saveSettings } from '../../utils/db';
@@ -22,6 +22,8 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
   const [contactEmail, setContactEmail] = useState('dapurnyonya@email.com');
   const [bankAccount, setBankAccount] = useState('1234-5678-9012');
   const [eWallet, setEWallet] = useState('+60 12-345 6789');
+  const [tngQr, setTngQr] = useState('');
+  const [duitnowQr, setDuitnowQr] = useState('');
   const [paymentInstructions, setPaymentInstructions] = useState('Please transfer to the account above or pay upon delivery.');
   const [orderCutoff, setOrderCutoff] = useState('3');
   const [aiEnabled, setAiEnabled] = useState(false);
@@ -38,6 +40,8 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
       if (s.contactEmail) setContactEmail(s.contactEmail);
       if (s.bankAccount) setBankAccount(s.bankAccount);
       if (s.eWallet) setEWallet(s.eWallet);
+      if (s.tngQr) setTngQr(s.tngQr);
+      if (s.duitnowQr) setDuitnowQr(s.duitnowQr);
       if (s.paymentInstructions) setPaymentInstructions(s.paymentInstructions);
       if (s.orderCutoff) setOrderCutoff(s.orderCutoff);
       if (s.aiEnabled !== undefined) setAiEnabled(s.aiEnabled);
@@ -55,6 +59,8 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
       contactEmail,
       bankAccount,
       eWallet,
+      tngQr,
+      duitnowQr,
       paymentInstructions,
       orderCutoff,
       aiEnabled,
@@ -120,6 +126,77 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
               <Label htmlFor="eWallet" className="text-base">E-Wallet Number (Touch 'n Go / DuitNow)</Label>
               <Input id="eWallet" value={eWallet} onChange={(e) => setEWallet(e.target.value)} placeholder="+60 12-345 6789" className="h-12 text-base" />
             </div>
+
+            {/* TNG QR */}
+            <div className="space-y-3">
+              <Label className="text-base">Touch 'n Go eWallet QR Code</Label>
+              <p className="text-sm text-gray-600">Upload your static TNG QR code. Shown to customers who choose "Touch 'n Go eWallet" at checkout.</p>
+              <div className="flex flex-col sm:flex-row items-start gap-4">
+                {tngQr ? (
+                  <div className="relative">
+                    <img src={tngQr} alt="TNG QR" className="w-40 h-40 object-contain border-2 border-green-200 rounded-xl bg-white p-2" />
+                    <button type="button" onClick={() => setTngQr('')} className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full text-xs flex items-center justify-center hover:bg-red-600">✕</button>
+                  </div>
+                ) : (
+                  <div className="w-40 h-40 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center bg-gray-50 text-gray-400">
+                    <QrCode className="w-10 h-10 mb-2" />
+                    <span className="text-xs text-center px-2">No TNG QR</span>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <label htmlFor="tng-qr-upload" className="cursor-pointer">
+                    <div className="inline-flex items-center gap-2 px-4 py-2 border-2 border-green-300 text-green-700 rounded-lg hover:bg-green-50 text-sm font-medium">
+                      <QrCode className="w-4 h-4" />
+                      {tngQr ? 'Replace TNG QR' : 'Upload TNG QR'}
+                    </div>
+                    <input id="tng-qr-upload" type="file" accept="image/*" className="hidden" onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onloadend = () => setTngQr(reader.result as string);
+                      reader.readAsDataURL(file);
+                    }} />
+                  </label>
+                  <p className="text-xs text-gray-500">Get your TNG QR from the TNG app → Profile → Receive Money → My QR.</p>
+                </div>
+              </div>
+            </div>
+
+            {/* DuitNow QR */}
+            <div className="space-y-3">
+              <Label className="text-base">DuitNow QR Code (Bank Transfer)</Label>
+              <p className="text-sm text-gray-600">Upload your DuitNow QR code. Shown to customers who choose "Bank Transfer / DuitNow" at checkout — scannable with any banking app (Maybank, CIMB, etc.).</p>
+              <div className="flex flex-col sm:flex-row items-start gap-4">
+                {duitnowQr ? (
+                  <div className="relative">
+                    <img src={duitnowQr} alt="DuitNow QR" className="w-40 h-40 object-contain border-2 border-blue-200 rounded-xl bg-white p-2" />
+                    <button type="button" onClick={() => setDuitnowQr('')} className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full text-xs flex items-center justify-center hover:bg-red-600">✕</button>
+                  </div>
+                ) : (
+                  <div className="w-40 h-40 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center bg-gray-50 text-gray-400">
+                    <QrCode className="w-10 h-10 mb-2" />
+                    <span className="text-xs text-center px-2">No DuitNow QR</span>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <label htmlFor="duitnow-qr-upload" className="cursor-pointer">
+                    <div className="inline-flex items-center gap-2 px-4 py-2 border-2 border-blue-300 text-blue-700 rounded-lg hover:bg-blue-50 text-sm font-medium">
+                      <QrCode className="w-4 h-4" />
+                      {duitnowQr ? 'Replace DuitNow QR' : 'Upload DuitNow QR'}
+                    </div>
+                    <input id="duitnow-qr-upload" type="file" accept="image/*" className="hidden" onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onloadend = () => setDuitnowQr(reader.result as string);
+                      reader.readAsDataURL(file);
+                    }} />
+                  </label>
+                  <p className="text-xs text-gray-500">Get your DuitNow QR from your banking app → DuitNow → Receive Money → My QR.</p>
+                </div>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="paymentInstructions" className="text-base">Payment Instructions</Label>
               <Textarea id="paymentInstructions" value={paymentInstructions} onChange={(e) => setPaymentInstructions(e.target.value)} className="min-h-32 text-base" />

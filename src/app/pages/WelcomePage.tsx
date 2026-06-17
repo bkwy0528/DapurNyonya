@@ -46,7 +46,7 @@ export default function WelcomePage() {
             </Button>
           </Link>
           <Link to="/register" className="block">
-            <Button size="lg" variant="outline" className="w-full h-14 text-lg border-2 border-orange-500 text-orange-600 hover:bg-orange-50">
+            <Button size="lg" variant="outline" className="w-full h-14 text-lg brand-button--outline">
               Register
             </Button>
           </Link>

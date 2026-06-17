@@ -57,7 +57,7 @@ export default function LoginPage() {
               <FormSection>
                 <Label htmlFor="email" className="text-base">Email Address</Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <Input id="email" type="email" placeholder="Enter your email" value={email} onChange={(e) => setEmail(e.target.value)} className="pl-12 text-base" />
                 </div>
               </FormSection>
@@ -65,16 +65,16 @@ export default function LoginPage() {
               <FormSection>
                 <Label htmlFor="password" className="text-base">Password</Label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <Input id="password" type={showPassword ? 'text' : 'password'} placeholder="Enter your password" value={password} onChange={(e) => setPassword(e.target.value)} className="pl-12 pr-12 text-base" />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
               </FormSection>
             </CardContent>
             <CardFooter className="flex flex-col gap-3">
-              <Button type="submit" size="lg" disabled={loading} className="w-full text-lg bg-gradient-to-r from-orange-500 to-amber-500">
+              <Button type="submit" size="lg" disabled={loading} className="w-full text-lg brand-button">
                 {loading ? 'Logging in…' : 'Login'}
               </Button>
               <div className="w-full space-y-2 text-sm text-gray-600">

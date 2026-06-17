@@ -70,6 +70,11 @@ export async function getOrdersByCustomer(customerId: string): Promise<any[]> {
   return snap.docs.map(d => d.data());
 }
 
+export async function getOrderById(orderId: string): Promise<any | null> {
+  const snap = await getDoc(doc(db, 'orders', orderId));
+  return snap.exists() ? snap.data() : null;
+}
+
 export async function createOrder(order: any): Promise<string> {
   const id = doc(collection(db, 'orders')).id;
   await setDoc(doc(db, 'orders', id), { ...order, id });

@@ -172,6 +172,33 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
                   </div>
                 </div>
 
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <p className="text-sm text-gray-600 mb-1">Payment Method:</p>
+                    <p className="font-semibold text-gray-900">
+                      {({'cash':'Cash','tng':"Touch 'n Go eWallet",'duitnow':'DuitNow QR','debit':'Bank Transfer','card':'Credit/Debit Card','ewallet':'eWallet'} as Record<string,string>)[order.paymentMethod] || order.paymentMethod || '—'}
+                    </p>
+                  </div>
+                  {order.transferReference ? (
+                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                      <p className="text-sm text-gray-600 mb-1">Transaction Reference:</p>
+                      <p className="font-semibold font-mono text-orange-800">{order.transferReference}</p>
+                    </div>
+                  ) : (
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <p className="text-sm text-gray-600 mb-1">Transaction Reference:</p>
+                      <p className="text-gray-400 text-sm">{order.paymentMethod === 'cash' || order.paymentMethod === 'card' ? 'N/A' : 'Not provided'}</p>
+                    </div>
+                  )}
+                </div>
+
+                {order.paymentNote && (
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <p className="text-sm text-gray-600 mb-1">Payment Note:</p>
+                    <p className="text-gray-900">{order.paymentNote}</p>
+                  </div>
+                )}
+
                 {order.deliveryMethod === 'delivery' && order.deliveryAddress && (
                   <div className="bg-gray-50 rounded-lg p-4">
                     <p className="text-sm text-gray-600 mb-1">Delivery Address:</p>

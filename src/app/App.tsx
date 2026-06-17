@@ -7,6 +7,7 @@ import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from '../firebase';
 import { ADMIN_EMAIL, getAdminProfile, getUserProfile, getProducts, seedDefaultProducts } from './utils/db';
 import InstallAppPrompt from './components/pwa/InstallAppPrompt';
+import LoadingSpinner from './components/ui/LoadingSpinner';
 
 // Import Pages
 import WelcomePage from './pages/WelcomePage';
@@ -29,6 +30,8 @@ import AdminProfilePage from './pages/admin/AdminProfilePage';
 import CartPage from './pages/customer/CartPage';
 import CheckoutPage from './pages/customer/CheckoutPage';
 import OrderConfirmationPage from './pages/customer/OrderConfirmationPage';
+import StripePaymentPage from './pages/customer/StripePaymentPage';
+import OrderReceiptPage from './pages/customer/OrderReceiptPage';
 import AnalyticsDashboard from './pages/admin/AnalyticsDashboard';
 
 export interface User {
@@ -86,13 +89,7 @@ function App() {
     setUser(updatedUser);
   };
 
-  if (authLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="w-10 h-10 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
+  if (authLoading) return <LoadingSpinner />;
 
   return (
     <CartProvider>
@@ -117,9 +114,11 @@ function App() {
                     <Route path="order/:productId" element={<ProductOrderPage user={user} />} />
                     <Route path="cart" element={<CartPage user={user} />} />
                     <Route path="checkout" element={<CheckoutPage user={user} />} />
+                    <Route path="payment" element={<StripePaymentPage user={user} />} />
                     <Route path="order-confirmation" element={<OrderConfirmationPage />} />
                     <Route path="order-summary" element={<OrderSummaryPage user={user} />} />
                     <Route path="tracking" element={<CustomerOrderTrackingPage user={user} />} />
+                    <Route path="receipt/:orderId" element={<OrderReceiptPage user={user} />} />
                     <Route path="profile" element={<ProfilePage user={user} onLogout={handleLogout} onProfileUpdate={handleProfileUpdate} />} />
                   </Routes>
                 ) : (

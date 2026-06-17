@@ -3,3 +3,5 @@ dist
 .env
 .firebase
 .agents
+functions/.env
+functions/lib

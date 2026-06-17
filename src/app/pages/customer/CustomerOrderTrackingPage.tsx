@@ -3,7 +3,7 @@ import { Link } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Progress } from '../../components/ui/progress';
-import { ArrowLeft, Package, Clock, Truck, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Package, Clock, Truck, AlertCircle, Receipt } from 'lucide-react';
 import { User } from '../../App';
 import { getOrdersByCustomer } from '../../utils/db';
 import { getStatusStyle } from '../../utils/statusStyles';
@@ -174,6 +174,15 @@ export default function CustomerOrderTrackingPage({ user }: CustomerOrderTrackin
                         <p className="text-gray-900">{order.adminNotes}</p>
                       </div>
                     )}
+
+                    <div className="pt-2 border-t border-gray-100">
+                      <Link to={`/customer/receipt/${order.id}`}>
+                        <Button variant="outline" className="w-full sm:w-auto gap-2">
+                          <Receipt className="w-4 h-4" />
+                          View Receipt
+                        </Button>
+                      </Link>
+                    </div>
                   </CardContent>
                 </Card>
               );

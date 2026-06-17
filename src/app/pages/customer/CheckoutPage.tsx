@@ -6,7 +6,7 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { RadioGroup, RadioGroupItem } from '../../components/ui/radio-group';
 import { Textarea } from '../../components/ui/textarea';
-import { ArrowLeft, MapPin, Truck, Home as HomeIcon, Calendar } from 'lucide-react';
+import { ArrowLeft, MapPin, Truck, Home as HomeIcon, Calendar, Banknote, Smartphone, Building2, CreditCard, CheckCircle2 } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { getMaxPrepDaysFromCart } from '../../utils/business';
 import { User } from '../../App';
@@ -14,6 +14,13 @@ import { toast } from 'sonner';
 import PageContainer from '../../components/ui/PageContainer';
 import FormSection from '../../components/ui/FormSection';
 import { getDailyLimits, getOrderCountForDate } from '../../utils/db';
+
+const paymentOptions = [
+  { value: 'cash' as const, Icon: Banknote, label: 'Cash', desc: 'Pay upon pickup or delivery' },
+  { value: 'tng' as const, Icon: Smartphone, label: "Touch 'n Go eWallet", desc: "Scan TNG QR code shown on next step" },
+  { value: 'debit' as const, Icon: Building2, label: 'Bank Transfer / DuitNow', desc: 'Scan DuitNow QR or transfer via internet banking — shown on next step' },
+  { value: 'card' as const, Icon: CreditCard, label: 'Credit / Debit Card', desc: 'Pay securely online via Stripe (test mode)' },
+];
 
 interface CheckoutPageProps {
   user: User;
@@ -28,15 +35,20 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
   const [contactPhone, setContactPhone] = useState(user.phone);
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [deliveryDate, setDeliveryDate] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'ewallet' | 'debit' | ''>('');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'tng' | 'debit' | 'card' | ''>('');
   const [paymentNote, setPaymentNote] = useState('');
   const [dateCapacity, setDateCapacity] = useState<{ count: number; limit: number } | null>(null);
 
+  const [minPrepDays] = useState(() => Math.max(1, getMaxPrepDaysFromCart(cartItems)));
   const [minDate] = useState(() => {
-    const maxPrep = getMaxPrepDaysFromCart(cartItems);
+    const days = Math.max(1, getMaxPrepDaysFromCart(cartItems));
     const min = new Date();
-    min.setDate(min.getDate() + Math.max(1, maxPrep));
-    return min.toISOString().split('T')[0];
+    min.setDate(min.getDate() + days);
+    // Use local date parts — toISOString() returns UTC and shifts the date after 8 PM in MY timezone
+    const y = min.getFullYear();
+    const m = String(min.getMonth() + 1).padStart(2, '0');
+    const d = String(min.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
   });
 
   useEffect(() => {
@@ -45,9 +57,9 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
 
   useEffect(() => {
     if (!deliveryDate) { setDateCapacity(null); return; }
-    Promise.all([getOrderCountForDate(deliveryDate), getDailyLimits()]).then(([count, limits]) => {
-      setDateCapacity({ count, limit: limits[deliveryDate] ?? 0 });
-    });
+    Promise.all([getOrderCountForDate(deliveryDate), getDailyLimits()])
+      .then(([count, limits]) => { setDateCapacity({ count, limit: limits[deliveryDate] ?? 0 }); })
+      .catch(() => { /* customer lacks permission to count all orders — capacity display unavailable */ });
   }, [deliveryDate]);
 
   const calculateDeliveryCharge = (): number => {
@@ -82,12 +94,16 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
       return;
     }
 
-    // Re-check capacity before proceeding
-    const [count, limits] = await Promise.all([getOrderCountForDate(deliveryDate), getDailyLimits()]);
-    const limit = limits[deliveryDate] ?? 0;
-    if (limit > 0 && count >= limit) {
-      toast.error('Selected date is fully booked. Please choose another date');
-      return;
+    // Re-check capacity before proceeding (admin-only read; skip check if customer lacks permission)
+    try {
+      const [count, limits] = await Promise.all([getOrderCountForDate(deliveryDate), getDailyLimits()]);
+      const limit = limits[deliveryDate] ?? 0;
+      if (limit > 0 && count >= limit) {
+        toast.error('Selected date is fully booked. Please choose another date');
+        return;
+      }
+    } catch {
+      // Customer doesn't have permission to count all orders — skip capacity guard
     }
 
     const pendingOrder = {
@@ -111,7 +127,11 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
     };
 
     sessionStorage.setItem('pendingOrder', JSON.stringify(pendingOrder));
-    navigate('/customer/order-confirmation');
+    if (paymentMethod === 'card') {
+      navigate('/customer/payment');
+    } else {
+      navigate('/customer/order-confirmation');
+    }
   };
 
   if (cartItems.length === 0) return null;
@@ -119,7 +139,7 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
   return (
     <PageContainer>
       <div className="page-hero page-hero--rounded">
-        <Link to="/customer/cart" className="inline-flex items-center text-white hover:text-gray-100 mb-2">
+        <Link to="/customer/cart" className="page-back-link">
           <ArrowLeft className="w-5 h-5 mr-2" />
           <span className="text-lg">Back to Cart</span>
         </Link>
@@ -138,7 +158,7 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
             <FormSection>
               <Label htmlFor="deliveryDate" className="text-base">Select Date *</Label>
               <Input id="deliveryDate" type="date" value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} min={minDate} className="text-base" />
-              <p className="text-sm text-gray-600">Orders require minimum 3-5 days advance notice</p>
+              <p className="text-sm text-gray-600">Items in your cart require at least {minPrepDays} day{minPrepDays !== 1 ? 's' : ''} advance notice</p>
               {dateCapacity && dateCapacity.limit > 0 && (
                 dateCapacity.count >= dateCapacity.limit
                   ? <p className="text-sm text-red-600">Selected date is fully booked. Please choose another date.</p>
@@ -191,7 +211,7 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
                 <div className="space-y-2">
                   <Label htmlFor="postalCode" className="text-base">Postal Code *</Label>
                   <div className="relative">
-                    <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                     <Input id="postalCode" value={postalCode} onChange={(e) => setPostalCode(e.target.value)} placeholder="e.g., 50470" className="pl-12 text-base" maxLength={5} />
                   </div>
                   {postalCode && deliveryCharge > 0 && (
@@ -248,23 +268,42 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
               </div>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-5">
               <div>
-                <Label className="text-base">Payment Method *</Label>
-                <div className="flex flex-col sm:flex-row gap-3 mt-2">
-                  <Button type="button" variant={paymentMethod === 'cash' ? 'secondary' : 'outline'} className={`w-full sm:w-auto px-4 py-3 ${paymentMethod === 'cash' ? 'border-orange-500 bg-orange-50' : ''}`} onClick={() => setPaymentMethod('cash')}>Cash</Button>
-                  <Button type="button" variant={paymentMethod === 'ewallet' ? 'secondary' : 'outline'} className={`w-full sm:w-auto px-4 py-3 ${paymentMethod === 'ewallet' ? 'border-orange-500 bg-orange-50' : ''}`} onClick={() => setPaymentMethod('ewallet')}>Touch 'n Go eWallet</Button>
-                  <Button type="button" variant={paymentMethod === 'debit' ? 'secondary' : 'outline'} className={`w-full sm:w-auto px-4 py-3 ${paymentMethod === 'debit' ? 'border-orange-500 bg-orange-50' : ''}`} onClick={() => setPaymentMethod('debit')}>Debit Card</Button>
+                <Label className="text-base font-semibold">Payment Method *</Label>
+                <div className="space-y-3 mt-3">
+                  {paymentOptions.map(({ value, Icon, label, desc }) => (
+                    <div
+                      key={value}
+                      onClick={() => setPaymentMethod(value)}
+                      className={`flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer transition-all select-none ${
+                        paymentMethod === value
+                          ? 'border-orange-500 bg-orange-50'
+                          : 'border-gray-200 bg-white hover:border-orange-300'
+                      }`}
+                    >
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+                        paymentMethod === value ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-500'
+                      }`}>
+                        <Icon className="w-5 h-5" />
+                      </div>
+                      <div className="flex-1">
+                        <p className={`font-semibold ${paymentMethod === value ? 'text-orange-800' : 'text-gray-800'}`}>{label}</p>
+                        <p className="text-sm text-gray-500 mt-0.5">{desc}</p>
+                      </div>
+                      {paymentMethod === value && <CheckCircle2 className="w-6 h-6 text-orange-500 shrink-0" />}
+                    </div>
+                  ))}
                 </div>
               </div>
               <div>
-                <Label className="text-base">Payment Note (optional)</Label>
-                <Input value={paymentNote} onChange={(e) => setPaymentNote(e.target.value)} className="mt-2" />
+                <Label className="text-base">Additional Notes <span className="text-gray-400 font-normal text-sm">(Optional)</span></Label>
+                <Input value={paymentNote} onChange={(e) => setPaymentNote(e.target.value)} className="mt-2 h-12" placeholder="e.g. allergy info, gift packaging, etc." />
               </div>
-              <Button size="lg" onClick={handlePlaceOrder} className="w-full bg-gradient-to-r from-green-500 to-emerald-500">
-                Proceed to Confirmation
+              <Button size="lg" onClick={handlePlaceOrder} className="w-full brand-button h-14 text-lg">
+                {paymentMethod === 'card' ? 'Proceed to Card Payment' : 'Review My Order →'}
               </Button>
-              <p className="text-xs text-center text-gray-600">Orders require admin approval before processing</p>
+              <p className="text-xs text-center text-gray-500">Orders require admin approval before processing</p>
             </div>
           </CardContent>
         </Card>

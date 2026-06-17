@@ -94,7 +94,7 @@ export default function RegisterPage({ onRegisterSuccess }: RegisterPageProps) {
               <FormSection>
                 <Label htmlFor="name" className="text-base">Full Name *</Label>
                 <div className="relative">
-                  <UserIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <Input id="name" type="text" placeholder="Enter your name" value={name} onChange={(e) => setName(e.target.value)} className="pl-12 text-base" required />
                 </div>
               </FormSection>
@@ -112,7 +112,7 @@ export default function RegisterPage({ onRegisterSuccess }: RegisterPageProps) {
                     </SelectContent>
                   </Select>
                   <div className="relative flex-1">
-                    <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                     <Input id="phone" type="tel" placeholder="123456789" value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))} className="h-12 pl-12 text-base" required />
                   </div>
                 </div>
@@ -122,7 +122,7 @@ export default function RegisterPage({ onRegisterSuccess }: RegisterPageProps) {
               <FormSection>
                 <Label htmlFor="email" className="text-base">Email *</Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <Input id="email" type="email" placeholder="Enter your email" value={email} onChange={(e) => setEmail(e.target.value)} className="pl-12 text-base" required />
                 </div>
               </FormSection>
@@ -130,9 +130,9 @@ export default function RegisterPage({ onRegisterSuccess }: RegisterPageProps) {
               <FormSection>
                 <Label htmlFor="password" className="text-base">Password *</Label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <Input id="password" type={showPassword ? 'text' : 'password'} placeholder="Create a password" value={password} onChange={(e) => setPassword(e.target.value)} className="pl-12 pr-12 text-base" required />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
@@ -141,9 +141,9 @@ export default function RegisterPage({ onRegisterSuccess }: RegisterPageProps) {
               <FormSection>
                 <Label htmlFor="confirmPassword" className="text-base">Confirm Password *</Label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <Input id="confirmPassword" type={showConfirmPassword ? 'text' : 'password'} placeholder="Confirm your password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="pl-12 pr-12 text-base" required />
-                  <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                     {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
@@ -158,7 +158,7 @@ export default function RegisterPage({ onRegisterSuccess }: RegisterPageProps) {
               )}
             </CardContent>
             <CardFooter className="flex flex-col space-y-4">
-              <Button type="submit" size="lg" disabled={loading} className="w-full text-lg bg-gradient-to-r from-orange-500 to-amber-500">
+              <Button type="submit" size="lg" disabled={loading} className="w-full text-lg brand-button">
                 {loading ? 'Creating account…' : 'Register'}
               </Button>
               <p className="text-center text-gray-600">Already have an account? <Link to="/login" className="text-orange-600 hover:text-orange-700">Login here</Link></p>

@@ -67,18 +67,6 @@
     @apply bg-orange-100 text-orange-700 hover:bg-orange-100;
   }
 
-  .page-container {
-    @apply min-h-screen pb-12 pt-6;
-  }
-
-  .page-container__inner {
-    @apply mx-auto w-full max-w-4xl px-4 md:px-6;
-  }
-
-  .page-container__inner--narrow {
-    @apply max-w-md;
-  }
-
   .page-hero {
     @apply bg-gradient-to-r from-orange-500 to-amber-500 p-6 text-white;
   }
@@ -101,6 +89,10 @@
 
   .brand-button {
     @apply bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600;
+  }
+
+  .brand-button--outline {
+    @apply border-2 border-orange-500 text-orange-600 hover:bg-orange-50 hover:text-orange-700;
   }
 
   .success-button {
