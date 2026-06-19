@@ -50,10 +50,15 @@ function App() {
   const [authLoading, setAuthLoading] = useState(true);
 
   useEffect(() => {
+    let latestCall = 0;
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      const thisCall = ++latestCall;
+
       if (firebaseUser) {
         if (firebaseUser.email === ADMIN_EMAIL) {
           const profile = await getAdminProfile();
+          if (thisCall !== latestCall) return;
           setUser({
             id: firebaseUser.uid,
             name: profile?.name || 'Admin',
@@ -62,11 +67,12 @@ function App() {
             role: 'admin',
             profilePicture: profile?.profilePicture,
           });
-          // Seed default products on first admin login
           const products = await getProducts();
+          if (thisCall !== latestCall) return;
           if (products.length === 0) await seedDefaultProducts();
         } else {
           const profile = await getUserProfile(firebaseUser.uid);
+          if (thisCall !== latestCall) return;
           if (profile) {
             setUser({ ...profile, id: firebaseUser.uid, role: 'customer' });
           } else {
@@ -76,8 +82,9 @@ function App() {
       } else {
         setUser(null);
       }
-      setAuthLoading(false);
+      if (thisCall === latestCall) setAuthLoading(false);
     });
+
     return unsubscribe;
   }, []);
 
@@ -98,7 +105,7 @@ function App() {
         <div className="app-shell">
           <Routes>
             {/* Public Routes */}
-            <Route path="/" element={<WelcomePage />} />
+            <Route path="/" element={user ? <Navigate to={user.role === 'admin' ? '/admin/dashboard' : '/customer/home'} replace /> : <WelcomePage />} />
             <Route path="/login" element={user ? <Navigate to={user.role === 'admin' ? '/admin/dashboard' : '/customer/home'} replace /> : <LoginPage />} />
             <Route path="/register" element={user ? <Navigate to="/customer/home" replace /> : <RegisterPage onRegisterSuccess={(u) => setUser(u)} />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
