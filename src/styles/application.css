@@ -159,6 +159,24 @@
     @apply bg-gray-50 rounded-lg p-4;
   }
 
+  .auth-divider {
+    @apply relative w-full flex items-center my-1;
+  }
+
+  .auth-divider::before,
+  .auth-divider::after {
+    content: '';
+    @apply flex-1 border-t border-gray-200;
+  }
+
+  .auth-divider__label {
+    @apply px-4 text-sm text-gray-500 bg-white;
+  }
+
+  .google-button {
+    @apply w-full h-14 text-base flex items-center justify-center gap-3;
+  }
+
   .install-prompt {
     @apply fixed inset-x-4 bottom-4 z-[60] mx-auto flex max-w-md items-center gap-3 rounded-lg border border-orange-200 bg-white p-3 shadow-xl;
     padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));

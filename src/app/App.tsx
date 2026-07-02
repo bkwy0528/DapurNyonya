@@ -5,7 +5,7 @@ import { CartProvider } from './context/CartContext';
 import Header from './components/ui/header';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from '../firebase';
-import { ADMIN_EMAIL, getAdminProfile, getUserProfile, getProducts, seedDefaultProducts } from './utils/db';
+import { ADMIN_EMAIL, getAdminProfile, getUserProfile, saveUserProfile, getProducts, seedDefaultProducts } from './utils/db';
 import InstallAppPrompt from './components/pwa/InstallAppPrompt';
 import LoadingSpinner from './components/ui/LoadingSpinner';
 
@@ -75,6 +75,19 @@ function App() {
           if (thisCall !== latestCall) return;
           if (profile) {
             setUser({ ...profile, id: firebaseUser.uid, role: 'customer' });
+          } else if (firebaseUser.providerData.some(p => p.providerId === 'google.com')) {
+            // First Google sign-in — auto-create a profile from Google account data
+            const newProfile = {
+              id: firebaseUser.uid,
+              name: firebaseUser.displayName || '',
+              email: firebaseUser.email || '',
+              phone: '',
+              role: 'customer' as const,
+              profilePicture: firebaseUser.photoURL || undefined,
+            };
+            await saveUserProfile(firebaseUser.uid, newProfile);
+            if (thisCall !== latestCall) return;
+            setUser(newProfile);
           } else {
             setUser(null);
           }
