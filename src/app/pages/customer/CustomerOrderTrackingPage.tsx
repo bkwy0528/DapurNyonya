@@ -175,14 +175,16 @@ export default function CustomerOrderTrackingPage({ user }: CustomerOrderTrackin
                       </div>
                     )}
 
-                    <div className="pt-2 border-t border-gray-100">
-                      <Link to={`/customer/receipt/${order.id}`}>
-                        <Button variant="outline" className="w-full sm:w-auto gap-2">
-                          <Receipt className="w-4 h-4" />
-                          View Receipt
-                        </Button>
-                      </Link>
-                    </div>
+                    {order.status !== 'Pending Approval' && order.status !== 'Rejected' && (
+                      <div className="pt-2 border-t border-gray-100">
+                        <Link to={`/customer/receipt/${order.id}`}>
+                          <Button variant="outline" className="w-full sm:w-auto gap-2">
+                            <Receipt className="w-4 h-4" />
+                            View Receipt
+                          </Button>
+                        </Link>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               );

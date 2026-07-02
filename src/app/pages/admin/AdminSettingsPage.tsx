@@ -25,7 +25,6 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
   const [tngQr, setTngQr] = useState('');
   const [duitnowQr, setDuitnowQr] = useState('');
   const [paymentInstructions, setPaymentInstructions] = useState('Please transfer to the account above or pay upon delivery.');
-  const [orderCutoff, setOrderCutoff] = useState('3');
   const [aiEnabled, setAiEnabled] = useState(false);
   const [announcementEnabled, setAnnouncementEnabled] = useState(true);
   const [announcementTitle, setAnnouncementTitle] = useState('Festive Season Orders Open!');
@@ -43,7 +42,6 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
       if (s.tngQr) setTngQr(s.tngQr);
       if (s.duitnowQr) setDuitnowQr(s.duitnowQr);
       if (s.paymentInstructions) setPaymentInstructions(s.paymentInstructions);
-      if (s.orderCutoff) setOrderCutoff(s.orderCutoff);
       if (s.aiEnabled !== undefined) setAiEnabled(s.aiEnabled);
       if (s.announcementEnabled !== undefined) setAnnouncementEnabled(s.announcementEnabled);
       if (s.announcementTitle) setAnnouncementTitle(s.announcementTitle);
@@ -62,7 +60,6 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
       tngQr,
       duitnowQr,
       paymentInstructions,
-      orderCutoff,
       aiEnabled,
       announcementEnabled,
       announcementTitle,
@@ -237,11 +234,6 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
             <CardTitle>Order Settings</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="orderCutoff" className="text-base">Order Cut-off (Days in Advance)</Label>
-              <Input id="orderCutoff" type="number" min="1" max="30" value={orderCutoff} onChange={(e) => setOrderCutoff(e.target.value)} className="h-12 text-base" />
-              <p className="text-sm text-gray-600">Minimum days required before delivery date for accepting orders</p>
-            </div>
             <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border-2 border-gray-200">
               <div className="space-y-1">
                 <Label htmlFor="aiEnabled" className="text-base">Enable AI Features (Coming Soon)</Label>
