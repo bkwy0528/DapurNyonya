@@ -30,7 +30,8 @@ import AdminProfilePage from './pages/admin/AdminProfilePage';
 import CartPage from './pages/customer/CartPage';
 import CheckoutPage from './pages/customer/CheckoutPage';
 import OrderConfirmationPage from './pages/customer/OrderConfirmationPage';
-import StripePaymentPage from './pages/customer/StripePaymentPage';
+import ToyyibPayPage from './pages/customer/ToyyibPayPage';
+import ToyyibPayReturnPage from './pages/customer/ToyyibPayReturnPage';
 import OrderReceiptPage from './pages/customer/OrderReceiptPage';
 import AnalyticsDashboard from './pages/admin/AnalyticsDashboard';
 
@@ -134,7 +135,8 @@ function App() {
                     <Route path="order/:productId" element={<ProductOrderPage user={user} />} />
                     <Route path="cart" element={<CartPage user={user} />} />
                     <Route path="checkout" element={<CheckoutPage user={user} />} />
-                    <Route path="payment" element={<StripePaymentPage user={user} />} />
+                    <Route path="payment" element={<ToyyibPayPage user={user} />} />
+                    <Route path="payment-return" element={<ToyyibPayReturnPage />} />
                     <Route path="order-confirmation" element={<OrderConfirmationPage />} />
                     <Route path="order-summary" element={<OrderSummaryPage user={user} />} />
                     <Route path="tracking" element={<CustomerOrderTrackingPage user={user} />} />

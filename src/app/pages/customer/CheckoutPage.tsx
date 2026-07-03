@@ -6,7 +6,7 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { RadioGroup, RadioGroupItem } from '../../components/ui/radio-group';
 import { Textarea } from '../../components/ui/textarea';
-import { ArrowLeft, MapPin, Truck, Home as HomeIcon, Calendar, Banknote, Smartphone, Building2, CreditCard, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, MapPin, Truck, Home as HomeIcon, Calendar, Banknote, Smartphone, Building2, CheckCircle2 } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { getMaxPrepDaysFromCart } from '../../utils/business';
 import { User } from '../../App';
@@ -16,10 +16,9 @@ import FormSection from '../../components/ui/FormSection';
 import { getDailyLimits, getOrderCountForDate } from '../../utils/db';
 
 const paymentOptions = [
-  { value: 'cash' as const, Icon: Banknote, label: 'Cash', desc: 'Pay upon pickup or delivery' },
-  { value: 'tng' as const, Icon: Smartphone, label: "Touch 'n Go eWallet", desc: "Scan TNG QR code shown on next step" },
-  { value: 'debit' as const, Icon: Building2, label: 'Bank Transfer / DuitNow', desc: 'Scan DuitNow QR or transfer via internet banking — shown on next step' },
-  { value: 'card' as const, Icon: CreditCard, label: 'Credit / Debit Card', desc: 'Pay securely online via Stripe (test mode)' },
+  { value: 'cash' as const, Icon: Banknote, label: 'Cash', desc: 'Pay cash upon pickup or delivery' },
+  { value: 'tng' as const, Icon: Smartphone, label: "Touch 'n Go eWallet", desc: 'Pay via TNG through ToyyibPay' },
+  { value: 'fpx' as const, Icon: Building2, label: 'FPX Online Banking', desc: 'Pay via internet banking through ToyyibPay' },
 ];
 
 interface CheckoutPageProps {
@@ -35,7 +34,7 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
   const [contactPhone, setContactPhone] = useState(user.phone);
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [deliveryDate, setDeliveryDate] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'tng' | 'debit' | 'card' | ''>('');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'tng' | 'fpx' | ''>('');
   const [paymentNote, setPaymentNote] = useState('');
   const [dateCapacity, setDateCapacity] = useState<{ count: number; limit: number } | null>(null);
 
@@ -127,7 +126,7 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
     };
 
     sessionStorage.setItem('pendingOrder', JSON.stringify(pendingOrder));
-    if (paymentMethod === 'card') {
+    if (paymentMethod === 'tng' || paymentMethod === 'fpx') {
       navigate('/customer/payment');
     } else {
       navigate('/customer/order-confirmation');
@@ -301,7 +300,7 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
                 <Input value={paymentNote} onChange={(e) => setPaymentNote(e.target.value)} className="mt-2 h-12" placeholder="e.g. allergy info, gift packaging, etc." />
               </div>
               <Button size="lg" onClick={handlePlaceOrder} className="w-full brand-button h-14 text-lg">
-                {paymentMethod === 'card' ? 'Proceed to Card Payment' : 'Review My Order →'}
+                {paymentMethod === 'tng' || paymentMethod === 'fpx' ? 'Proceed to Online Payment' : 'Review My Order →'}
               </Button>
               <p className="text-xs text-center text-gray-500">Orders require admin approval before processing</p>
             </div>

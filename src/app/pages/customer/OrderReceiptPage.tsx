@@ -13,13 +13,15 @@ interface OrderReceiptPageProps {
 
 const PAYMENT_LABELS: Record<string, string> = {
   cash: 'Cash on Pickup / Delivery',
-  tng: "Touch 'n Go eWallet",
+  tng: "Touch 'n Go eWallet (Online)",
+  fpx: 'FPX Online Banking',
+  // Historical labels — no longer selectable at checkout, kept for orders placed before the ToyyibPay migration
   debit: 'Bank Transfer / DuitNow',
   card: 'Credit / Debit Card (Online)',
 };
 
 function paymentStatus(order: any): { label: string; colour: string } {
-  if (order.paymentMethod === 'card') return { label: 'Paid Online', colour: 'text-green-700 bg-green-100' };
+  if (order.paymentStatus === 'paid') return { label: 'Paid Online', colour: 'text-green-700 bg-green-100' };
   if (order.paymentMethod === 'cash') return { label: 'Cash — Pay on Arrival', colour: 'text-yellow-800 bg-yellow-100' };
   const verified = ['Order Received', 'In Preparation', 'Ready for Pickup', 'Delivered'].includes(order.status);
   return verified
@@ -204,10 +206,10 @@ export default function OrderReceiptPage({ user }: OrderReceiptPageProps) {
                   <span className="font-mono font-semibold text-gray-900">{order.transferReference}</span>
                 </div>
               )}
-              {order.paymentIntentId && (
+              {(order.transactionId || order.paymentIntentId) && (
                 <div className="flex justify-between items-start">
-                  <span className="text-gray-500">Stripe Payment ID</span>
-                  <span className="font-mono text-xs text-gray-700">…{order.paymentIntentId.slice(-12)}</span>
+                  <span className="text-gray-500">Payment Reference</span>
+                  <span className="font-mono text-xs text-gray-700">…{(order.transactionId || order.paymentIntentId).slice(-12)}</span>
                 </div>
               )}
               {order.paidAt && (
