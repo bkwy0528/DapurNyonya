@@ -9,6 +9,7 @@ import { ArrowLeft, User as UserIcon, Camera, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { User } from '../../App';
 import { getAdminProfile, saveAdminProfile } from '../../utils/db';
+import { compressImage } from '../../utils/image';
 
 interface AdminProfilePageProps {
   user: User;
@@ -44,12 +45,14 @@ export default function AdminProfilePage({ user, onLogout, onProfileUpdate }: Ad
     });
   }, []);
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => setProfilePicture(reader.result as string);
-      reader.readAsDataURL(file);
+    if (!file) return;
+    try {
+      // Compressed to stay under Firestore's 1 MiB document limit
+      setProfilePicture(await compressImage(file));
+    } catch (err: any) {
+      toast.error(err.message || 'Could not process the image. Please try another photo.');
     }
   };
 

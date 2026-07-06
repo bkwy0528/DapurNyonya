@@ -8,13 +8,20 @@ import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../../components/ui/dialog';
 import { Switch } from '../../components/ui/switch';
-import { ArrowLeft, Plus, Edit, Trash2, Upload, X } from 'lucide-react';
+import { ArrowLeft, Plus, Edit, Trash2, Upload, X, Wheat } from 'lucide-react';
 import { toast } from 'sonner';
 import { User } from '../../App';
 import { getProducts, saveProduct, deleteProduct } from '../../utils/db';
+import { compressImage } from '../../utils/image';
 
 interface ProductManagementPageProps {
   user: User;
+}
+
+export interface ProductIngredient {
+  name: string;
+  quantity: number; // amount needed per 1 unit of the product
+  unit: string;
 }
 
 interface Product {
@@ -26,12 +33,14 @@ interface Product {
   unit: string;
   prepDays: number;
   available: boolean;
+  ingredients?: ProductIngredient[];
 }
 
 export default function ProductManagementPage({ user: _user }: ProductManagementPageProps) {
   const [products, setProducts] = useState<Product[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [imagePreview, setImagePreview] = useState<string>('');
 
   const [formData, setFormData] = useState({
@@ -43,26 +52,32 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
     prepDays: '3',
     available: true,
   });
+  const [ingredients, setIngredients] = useState<ProductIngredient[]>([]);
 
   useEffect(() => {
     getProducts().then(setProducts);
   }, []);
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Photos are resized/compressed before storing — Firestore documents cap at
+  // 1 MiB, so raw camera photos saved as base64 would silently fail to write
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error('Image size should be less than 5MB');
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result as string;
-        setFormData(prev => ({ ...prev, image: base64String }));
-        setImagePreview(base64String);
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+    try {
+      const compressed = await compressImage(file);
+      setFormData(prev => ({ ...prev, image: compressed }));
+      setImagePreview(compressed);
+    } catch (err: any) {
+      toast.error(err.message || 'Could not process the image. Please try another photo.');
     }
+  };
+
+  const addIngredientRow = () => setIngredients(prev => [...prev, { name: '', quantity: 0, unit: 'g' }]);
+  const removeIngredientRow = (index: number) => setIngredients(prev => prev.filter((_, i) => i !== index));
+  const updateIngredientRow = (index: number, field: keyof ProductIngredient, value: string) => {
+    setIngredients(prev => prev.map((ing, i) =>
+      i === index ? { ...ing, [field]: field === 'quantity' ? (parseFloat(value) || 0) : value } : ing
+    ));
   };
 
   const handleSaveProduct = async () => {
@@ -81,8 +96,11 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
       return;
     }
 
+    // Only keep completed ingredient rows
+    const cleanIngredients = ingredients.filter(ing => ing.name.trim() && ing.quantity > 0);
+
     if (editingProduct) {
-      const updated: Product = { ...editingProduct, ...formData, price, prepDays };
+      const updated: Product = { ...editingProduct, ...formData, price, prepDays, ingredients: cleanIngredients };
       await saveProduct(updated);
       setProducts(prev => prev.map(p => p.id === editingProduct.id ? updated : p));
       toast.success('Product updated successfully!');
@@ -92,6 +110,7 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
         ...formData,
         price,
         prepDays,
+        ingredients: cleanIngredients,
       };
       await saveProduct(newProduct);
       setProducts(prev => [...prev, newProduct]);
@@ -113,20 +132,22 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
       prepDays: String(product.prepDays || 3),
       available: product.available,
     });
+    setIngredients(product.ingredients || []);
     setImagePreview(product.image);
     setIsDialogOpen(true);
   };
 
-  const handleDeleteProduct = async (productId: string) => {
-    if (window.confirm('Are you sure you want to delete this product?')) {
-      await deleteProduct(productId);
-      setProducts(prev => prev.filter(p => p.id !== productId));
-      toast.success('Product deleted successfully!');
-    }
+  const confirmDeleteProduct = async () => {
+    if (!productToDelete) return;
+    await deleteProduct(productToDelete.id);
+    setProducts(prev => prev.filter(p => p.id !== productToDelete.id));
+    toast.success('Product deleted successfully!');
+    setProductToDelete(null);
   };
 
   const resetForm = () => {
     setFormData({ name: '', description: '', price: '', image: '', unit: '', prepDays: '3', available: true });
+    setIngredients([]);
     setImagePreview('');
     setEditingProduct(null);
   };
@@ -203,8 +224,36 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
                     <div className="text-sm text-gray-500 flex items-center">or</div>
                     <Input placeholder="Image URL" value={formData.image.startsWith('data:') ? '' : formData.image} onChange={(e) => { setFormData(prev => ({ ...prev, image: e.target.value })); setImagePreview(e.target.value); }} className="flex-1 h-12" />
                   </div>
-                  <p className="text-xs text-gray-500">Upload an image (max 5MB) or enter an image URL</p>
+                  <p className="text-xs text-gray-500">Upload a photo (automatically resized) or enter an image URL</p>
                 </div>
+              </div>
+
+              <div className="space-y-3 p-4 bg-gray-50 rounded-lg border">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="flex items-center gap-2"><Wheat className="w-4 h-4 text-orange-600" />Ingredients per {formData.unit || 'unit'}</Label>
+                    <p className="text-xs text-gray-500 mt-1">Used by Ingredient Planning to calculate shopping needs from upcoming orders</p>
+                  </div>
+                  <Button type="button" variant="outline" size="sm" onClick={addIngredientRow}>
+                    <Plus className="w-4 h-4 mr-1" />Add
+                  </Button>
+                </div>
+                {ingredients.length === 0 ? (
+                  <p className="text-sm text-gray-500">No ingredients added yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {ingredients.map((ing, index) => (
+                      <div key={index} className="flex gap-2 items-center">
+                        <Input value={ing.name} onChange={(e) => updateIngredientRow(index, 'name', e.target.value)} placeholder="e.g. Flour" className="flex-1 h-11" />
+                        <Input type="number" value={ing.quantity || ''} onChange={(e) => updateIngredientRow(index, 'quantity', e.target.value)} placeholder="Qty" min="0" step="0.1" className="w-24 h-11 text-right" />
+                        <Input value={ing.unit} onChange={(e) => updateIngredientRow(index, 'unit', e.target.value)} placeholder="g / pieces" className="w-28 h-11" />
+                        <Button type="button" variant="ghost" size="sm" onClick={() => removeIngredientRow(index)} className="text-red-600 hover:bg-red-50 shrink-0">
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
@@ -259,7 +308,7 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
                       <Button variant="outline" onClick={() => handleEditProduct(product)} className="flex-1 border-2">
                         <Edit className="w-4 h-4 mr-2" />Edit
                       </Button>
-                      <Button variant="outline" onClick={() => handleDeleteProduct(product.id)} className="flex-1 border-2 border-red-200 text-red-600 hover:bg-red-50">
+                      <Button variant="outline" onClick={() => setProductToDelete(product)} className="flex-1 border-2 border-red-200 text-red-600 hover:bg-red-50">
                         <Trash2 className="w-4 h-4 mr-2" />Delete
                       </Button>
                     </div>
@@ -270,6 +319,23 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
           ))}
         </div>
       </div>
+
+      <Dialog open={productToDelete !== null} onOpenChange={(open) => !open && setProductToDelete(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete this product?</DialogTitle>
+          </DialogHeader>
+          <p className="text-gray-700">
+            Are you sure you want to delete <strong>{productToDelete?.name}</strong>? Customers will no longer be able to order it. This cannot be undone.
+          </p>
+          <div className="flex gap-3 pt-2">
+            <Button variant="outline" onClick={() => setProductToDelete(null)} className="flex-1 h-12">Cancel</Button>
+            <Button variant="destructive" onClick={confirmDeleteProduct} className="flex-1 h-12">
+              <Trash2 className="w-4 h-4 mr-2" />Delete Product
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

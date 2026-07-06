@@ -5,9 +5,9 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Button } from '../../components/ui/button';
 import { Checkbox } from '../../components/ui/checkbox';
-import { ArrowLeft, Package, Edit, Calculator } from 'lucide-react';
+import { ArrowLeft, Package, Calculator, AlertCircle } from 'lucide-react';
 import { User } from '../../App';
-import { getOrders } from '../../utils/db';
+import { getOrders, getProducts } from '../../utils/db';
 
 interface IngredientEstimationPageProps {
   user: User;
@@ -21,91 +21,79 @@ interface IngredientEstimate {
 }
 
 interface ProductCount {
+  id: string;
   name: string;
   count: number;
+  hasRecipe: boolean;
+}
+
+// Only orders that still need cooking matter for shopping: upcoming delivery
+// dates, and not rejected/cancelled/already delivered or out the door.
+const NEEDS_PREPARATION = ['Pending Approval', 'Order Received', 'In Preparation'];
+
+function todayKey(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 export default function IngredientEstimationPage({ user: _user }: IngredientEstimationPageProps) {
   const [manualMode, setManualMode] = useState(false);
-  const [productCounts, setProductCounts] = useState<ProductCount[]>([
-    { name: 'Traditional Dumplings', count: 0 },
-    { name: 'Festive Cookies', count: 0 },
-    { name: 'Traditional Snacks', count: 0 },
-  ]);
+  const [products, setProducts] = useState<any[]>([]);
+  const [productCounts, setProductCounts] = useState<ProductCount[]>([]);
   const [ingredients, setIngredients] = useState<IngredientEstimate[]>([]);
 
   useEffect(() => {
-    if (!manualMode) {
-      calculateFromOrders();
-    }
+    if (!manualMode) calculateFromOrders();
   }, [manualMode]);
 
   const calculateFromOrders = async () => {
-    const orders = await getOrders();
-    const counts: { [key: string]: number } = {};
+    const [allProducts, orders] = await Promise.all([getProducts(), getOrders()]);
+    setProducts(allProducts);
 
+    const today = todayKey();
+    const counts: { [name: string]: number } = {};
     orders
-      .filter((order: any) => order.status !== 'Rejected')
+      .filter((order: any) =>
+        NEEDS_PREPARATION.includes(order.status)
+        && order.deliveryDate
+        && order.deliveryDate >= today
+      )
       .forEach((order: any) => {
-        if (order.items && Array.isArray(order.items)) {
-          order.items.forEach((item: any) => {
-            counts[item.name] = (counts[item.name] || 0) + item.quantity;
-          });
-        }
+        (order.items || []).forEach((item: any) => {
+          counts[item.name] = (counts[item.name] || 0) + (item.quantity || 0);
+        });
       });
 
-    const dumplings = counts['Traditional Dumplings'] || 0;
-    const cookies = counts['Festive Cookies'] || 0;
-    const snacks = counts['Traditional Snacks'] || 0;
-
-    setProductCounts([
-      { name: 'Traditional Dumplings', count: dumplings },
-      { name: 'Festive Cookies', count: cookies },
-      { name: 'Traditional Snacks', count: snacks },
-    ]);
-
-    calculateIngredients(dumplings, cookies, snacks);
+    const newCounts: ProductCount[] = allProducts.map((p: any) => ({
+      id: p.id,
+      name: p.name,
+      count: counts[p.name] || 0,
+      hasRecipe: Array.isArray(p.ingredients) && p.ingredients.length > 0,
+    }));
+    setProductCounts(newCounts);
+    calculateIngredients(allProducts, newCounts);
   };
 
-  const calculateIngredients = (dumplings: number, cookies: number, snacks: number) => {
-    const estimatedIngredients: IngredientEstimate[] = [];
-
-    if (dumplings > 0) {
-      estimatedIngredients.push(
-        { name: 'Flour', quantity: dumplings * 250, unit: 'g', checked: false },
-        { name: 'Ground Meat', quantity: dumplings * 150, unit: 'g', checked: false },
-        { name: 'Vegetables (chopped)', quantity: dumplings * 100, unit: 'g', checked: false },
-        { name: 'Dumpling Wrappers', quantity: dumplings * 12, unit: 'pieces', checked: false },
-      );
-    }
-
-    if (cookies > 0) {
-      estimatedIngredients.push(
-        { name: 'Butter', quantity: cookies * 200, unit: 'g', checked: false },
-        { name: 'Sugar', quantity: cookies * 150, unit: 'g', checked: false },
-        { name: 'Eggs', quantity: cookies * 2, unit: 'pieces', checked: false },
-        { name: 'Flour (cookies)', quantity: cookies * 300, unit: 'g', checked: false },
-      );
-    }
-
-    if (snacks > 0) {
-      estimatedIngredients.push(
-        { name: 'Mixed Nuts', quantity: snacks * 200, unit: 'g', checked: false },
-        { name: 'Dried Fruits', quantity: snacks * 150, unit: 'g', checked: false },
-        { name: 'Seeds', quantity: snacks * 150, unit: 'g', checked: false },
-      );
-    }
-
-    setIngredients(estimatedIngredients);
+  const calculateIngredients = (allProducts: any[], countList: ProductCount[]) => {
+    // Same ingredient (name + unit) across products gets summed into one line
+    const aggregated: { [key: string]: IngredientEstimate } = {};
+    countList.forEach(({ id, count }) => {
+      if (count <= 0) return;
+      const product = allProducts.find((p: any) => p.id === id);
+      (product?.ingredients || []).forEach((ing: any) => {
+        const key = `${ing.name.toLowerCase()}|${ing.unit}`;
+        if (!aggregated[key]) aggregated[key] = { name: ing.name, quantity: 0, unit: ing.unit, checked: false };
+        aggregated[key].quantity += ing.quantity * count;
+      });
+    });
+    setIngredients(Object.values(aggregated));
   };
 
-  const handleManualCalculate = () => {
-    calculateIngredients(productCounts[0].count, productCounts[1].count, productCounts[2].count);
-  };
+  const handleManualCalculate = () => calculateIngredients(products, productCounts);
 
-  const updateProductCount = (index: number, value: string) => {
+  const updateProductCount = (id: string, value: string) => {
     const numValue = parseInt(value) || 0;
-    setProductCounts(prev => prev.map((p, i) => i === index ? { ...p, count: numValue } : p));
+    setProductCounts(prev => prev.map(p => p.id === id ? { ...p, count: numValue } : p));
   };
 
   const toggleIngredient = (index: number) => {
@@ -116,6 +104,8 @@ export default function IngredientEstimationPage({ user: _user }: IngredientEsti
     const numValue = parseFloat(value) || 0;
     setIngredients(prev => prev.map((ing, i) => i === index ? { ...ing, quantity: numValue } : ing));
   };
+
+  const productsWithoutRecipe = productCounts.filter(p => p.count > 0 && !p.hasRecipe);
 
   return (
     <div className="min-h-screen pb-24">
@@ -147,7 +137,7 @@ export default function IngredientEstimationPage({ user: _user }: IngredientEsti
             <p className="text-sm text-gray-600">
               {manualMode
                 ? 'You can manually enter the number of products to calculate ingredient needs.'
-                : 'Ingredients are automatically calculated from existing orders.'}
+                : 'Quantities are calculated from upcoming orders that still need preparation (pending, approved, or in preparation).'}
             </p>
           </CardContent>
         </Card>
@@ -157,20 +147,29 @@ export default function IngredientEstimationPage({ user: _user }: IngredientEsti
             <CardTitle>Product Quantities</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {productCounts.map((product, index) => (
-              <div key={index} className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 bg-gray-50 rounded-lg">
-                <Label className="text-base font-semibold">{product.name}</Label>
-                <div className="flex items-center space-x-3">
-                  {manualMode ? (
-                    <Input type="number" value={product.count} onChange={(e) => updateProductCount(index, e.target.value)} className="w-32 h-12 text-lg text-center" min="0" />
-                  ) : (
-                    <div className="text-3xl font-bold text-orange-600">{product.count}</div>
-                  )}
-                  <span className="text-gray-600">units</span>
+            {productCounts.length === 0 ? (
+              <p className="text-gray-600">No products found. Add products in Product Management first.</p>
+            ) : (
+              productCounts.map((product) => (
+                <div key={product.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 bg-gray-50 rounded-lg">
+                  <div>
+                    <Label className="text-base font-semibold">{product.name}</Label>
+                    {!product.hasRecipe && (
+                      <p className="text-sm text-orange-700 mt-1">No recipe set — add ingredients to this product in Product Management</p>
+                    )}
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    {manualMode ? (
+                      <Input type="number" value={product.count} onChange={(e) => updateProductCount(product.id, e.target.value)} className="w-32 h-12 text-lg text-center" min="0" />
+                    ) : (
+                      <div className="text-3xl font-bold text-orange-600">{product.count}</div>
+                    )}
+                    <span className="text-gray-600">units</span>
+                  </div>
                 </div>
-              </div>
-            ))}
-            {manualMode && (
+              ))
+            )}
+            {manualMode && productCounts.length > 0 && (
               <Button onClick={handleManualCalculate} size="lg" className="w-full brand-button">
                 <Calculator className="w-5 h-5 mr-2" />
                 Calculate Ingredients
@@ -178,6 +177,18 @@ export default function IngredientEstimationPage({ user: _user }: IngredientEsti
             )}
           </CardContent>
         </Card>
+
+        {productsWithoutRecipe.length > 0 && (
+          <div className="warning-box">
+            <div className="flex items-start space-x-3">
+              <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-1" />
+              <p className="text-sm text-yellow-800">
+                <strong>{productsWithoutRecipe.map(p => p.name).join(', ')}</strong> {productsWithoutRecipe.length === 1 ? 'has' : 'have'} upcoming
+                orders but no recipe, so {productsWithoutRecipe.length === 1 ? 'its' : 'their'} ingredients are not included below.
+              </p>
+            </div>
+          </div>
+        )}
 
         {ingredients.length > 0 ? (
           <Card>
@@ -198,7 +209,6 @@ export default function IngredientEstimationPage({ user: _user }: IngredientEsti
                   <div className="flex items-center space-x-3">
                     <Input type="number" value={ingredient.quantity} onChange={(e) => updateQuantity(index, e.target.value)} className="w-24 h-10 text-right" min="0" step="0.1" />
                     <span className="text-gray-600 min-w-[60px]">{ingredient.unit}</span>
-                    <Edit className="w-4 h-4 text-gray-400" />
                   </div>
                 </div>
               ))}
@@ -218,7 +228,7 @@ export default function IngredientEstimationPage({ user: _user }: IngredientEsti
               <p className="text-gray-600">
                 {manualMode
                   ? 'Enter product quantities above and click Calculate to see ingredient needs.'
-                  : 'Orders will automatically generate ingredient calculations.'}
+                  : 'Upcoming orders will automatically generate ingredient calculations once products have recipes.'}
               </p>
             </CardContent>
           </Card>
