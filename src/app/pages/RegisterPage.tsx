@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { ArrowLeft, User as UserIcon, Mail, Phone, Lock, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, User as UserIcon, Mail, Phone, Lock, Eye, EyeOff, Check, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { auth } from '../../firebase';
@@ -28,8 +28,14 @@ export default function RegisterPage({ onRegisterSuccess }: RegisterPageProps) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordFocused, setPasswordFocused] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+
+  const passwordRequirements = useMemo(() => [
+    { label: 'At least 8 characters', met: password.length >= 8 },
+    { label: 'Contains letters and numbers', met: /[A-Za-z]/.test(password) && /[0-9]/.test(password) },
+  ], [password]);
 
   const handleGoogleSignIn = async () => {
     setLoading(true);
@@ -145,11 +151,31 @@ export default function RegisterPage({ onRegisterSuccess }: RegisterPageProps) {
                 <Label htmlFor="password" className="text-base">Password *</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <Input id="password" type={showPassword ? 'text' : 'password'} placeholder="Create a password" value={password} onChange={(e) => setPassword(e.target.value)} className="pl-12 pr-12 text-base" required />
+                  <Input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="Create a password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    onFocus={() => setPasswordFocused(true)}
+                    onBlur={() => setPasswordFocused(false)}
+                    className="pl-12 pr-12 text-base"
+                    required
+                  />
                   <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
+                {(passwordFocused || password.length > 0) && (
+                  <div className="space-y-1 pt-1">
+                    {passwordRequirements.map((req) => (
+                      <div key={req.label} className={`flex items-center gap-2 text-xs ${req.met ? 'text-green-600' : 'text-gray-500'}`}>
+                        {req.met ? <Check className="w-3.5 h-3.5 shrink-0" /> : <X className="w-3.5 h-3.5 shrink-0" />}
+                        <span>{req.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </FormSection>
 
               <FormSection>

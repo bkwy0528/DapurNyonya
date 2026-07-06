@@ -2,7 +2,6 @@ export function validatePassword(password: string) {
   const errors: string[] = [];
   if (password.length < 8) errors.push('Password must be at least 8 characters');
   if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) errors.push('Password must be alphanumeric (letters and numbers)');
-  if (!/[!@#$%^&*(),.?":{}|<>\[\]\\/;:'`~_+=-]/.test(password)) errors.push('Password must include at least one symbol');
   return errors;
 }
 
