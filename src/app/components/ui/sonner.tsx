@@ -10,6 +10,11 @@ const Toaster = ({ ...props }: ToasterProps) => {
     <Sonner
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
+      // Older users need longer to notice and read a toast
+      duration={6000}
+      toastOptions={{
+        style: { fontSize: "1rem" },
+      }}
       style={
         {
           "--normal-bg": "var(--popover)",

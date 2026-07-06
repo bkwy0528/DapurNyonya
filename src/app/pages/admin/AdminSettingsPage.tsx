@@ -20,7 +20,6 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
   const [businessDescription, setBusinessDescription] = useState('Homemade Dumplings & Snacks');
   const [contactPhone, setContactPhone] = useState('+60 12-345 6789');
   const [contactEmail, setContactEmail] = useState('dapurnyonya@email.com');
-  const [aiEnabled, setAiEnabled] = useState(false);
   const [announcementEnabled, setAnnouncementEnabled] = useState(true);
   const [announcementTitle, setAnnouncementTitle] = useState('Festive Season Orders Open!');
   const [announcementText, setAnnouncementText] = useState('Place your orders now for the upcoming celebrations. Limited slots available!');
@@ -32,7 +31,6 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
       if (s.businessDescription) setBusinessDescription(s.businessDescription);
       if (s.contactPhone) setContactPhone(s.contactPhone);
       if (s.contactEmail) setContactEmail(s.contactEmail);
-      if (s.aiEnabled !== undefined) setAiEnabled(s.aiEnabled);
       if (s.announcementEnabled !== undefined) setAnnouncementEnabled(s.announcementEnabled);
       if (s.announcementTitle) setAnnouncementTitle(s.announcementTitle);
       if (s.announcementText) setAnnouncementText(s.announcementText);
@@ -46,7 +44,6 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
         businessDescription,
         contactPhone,
         contactEmail,
-        aiEnabled,
         announcementEnabled,
         announcementTitle,
         announcementText,
@@ -124,21 +121,6 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
                 </div>
               </>
             )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Order Settings</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border-2 border-gray-200">
-              <div className="space-y-1">
-                <Label htmlFor="aiEnabled" className="text-base">Enable AI Features (Coming Soon)</Label>
-                <p className="text-sm text-gray-600">Auto-calculate ingredients and suggest production schedules</p>
-              </div>
-              <Switch id="aiEnabled" checked={aiEnabled} onCheckedChange={setAiEnabled} />
-            </div>
           </CardContent>
         </Card>
 
