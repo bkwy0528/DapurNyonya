@@ -48,23 +48,35 @@ export default function AnalyticsDashboard({ user: _user }: AnalyticsDashboardPr
     const orders = await getOrders();
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-    const totalRevenue = orders.filter((o: any) => o.status !== 'Rejected').reduce((sum: number, o: any) => sum + (o.total || 0), 0);
+    // One revenue rule everywhere: only approved orders count — pending,
+    // rejected and cancelled orders haven't earned anything
+    const isRevenueOrder = (o: any) => !['Rejected', 'Cancelled', 'Pending Approval'].includes(o.status);
+    const revenueOrders = orders.filter(isRevenueOrder);
+
+    const totalRevenue = revenueOrders.reduce((sum: number, o: any) => sum + (o.total || 0), 0);
     const totalOrders = orders.length;
     const pendingOrders = orders.filter((o: any) => o.status === 'Pending Approval').length;
     const completedOrders = orders.filter((o: any) => o.status === 'Delivered').length;
 
+    // Keyed by sortable "YYYY-MM" so months chart in chronological order
     const monthlyData: { [key: string]: number } = {};
-    orders.forEach((order: any) => {
+    revenueOrders.forEach((order: any) => {
       if (order.orderDate) {
         const date = new Date(order.orderDate);
-        const monthKey = `${monthNames[date.getMonth()]} ${date.getFullYear()}`;
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
         monthlyData[monthKey] = (monthlyData[monthKey] || 0) + (order.total || 0);
       }
     });
-    const monthlyRevenue = Object.entries(monthlyData).slice(-6).map(([month, revenue]) => ({ month, revenue }));
+    const monthlyRevenue = Object.entries(monthlyData)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-6)
+      .map(([key, revenue]) => {
+        const [year, month] = key.split('-');
+        return { month: `${monthNames[Number(month) - 1]} ${year}`, revenue };
+      });
 
     const productSalesMap: { [key: string]: { sales: number; revenue: number } } = {};
-    orders.forEach((order: any) => {
+    revenueOrders.forEach((order: any) => {
       if (order.items && Array.isArray(order.items)) {
         order.items.forEach((item: any) => {
           if (!productSalesMap[item.name]) productSalesMap[item.name] = { sales: 0, revenue: 0 };
@@ -83,13 +95,13 @@ export default function AnalyticsDashboard({ user: _user }: AnalyticsDashboardPr
 
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const recentRevenue = orders
-      .filter((o: any) => o.status !== 'Rejected' && new Date(o.orderDate) >= thirtyDaysAgo)
+    const recentRevenue = revenueOrders
+      .filter((o: any) => new Date(o.orderDate) >= thirtyDaysAgo)
       .reduce((sum: number, o: any) => sum + (o.total || 0), 0);
 
     const sixtyDaysAgo = new Date();
     sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
-    const previousRevenue = orders
+    const previousRevenue = revenueOrders
       .filter((o: any) => {
         const d = new Date(o.orderDate);
         return d >= sixtyDaysAgo && d < thirtyDaysAgo;

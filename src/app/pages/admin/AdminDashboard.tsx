@@ -36,8 +36,10 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
         const daysUntil = Math.ceil((new Date(o.deliveryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
         return daysUntil <= 7 && daysUntil >= 0;
       });
+      // Revenue counts approved orders only — pending, rejected and cancelled
+      // orders haven't earned anything (same rule as the analytics page)
       const revenue = orders
-        .filter((o: any) => o.status !== 'Rejected')
+        .filter((o: any) => !['Rejected', 'Cancelled', 'Pending Approval'].includes(o.status))
         .reduce((sum: number, o: any) => sum + (typeof o.total === 'number' ? o.total : 0), 0);
 
       setStats({
