@@ -13,13 +13,21 @@ import { createOrder } from '../../utils/db';
 function CashConfirmView({ pending }: { pending: any }) {
   const navigate = useNavigate();
   const { clearCart } = useCart();
+  const [submitting, setSubmitting] = useState(false);
 
   const handleConfirm = async () => {
-    await createOrder({ ...pending, status: 'Pending Approval' });
-    sessionStorage.removeItem('pendingOrder');
-    clearCart();
-    toast.success('Order submitted! We will notify you once confirmed.');
-    navigate('/customer/tracking');
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      await createOrder({ ...pending, status: 'Pending Approval' });
+      sessionStorage.removeItem('pendingOrder');
+      clearCart();
+      toast.success('Order submitted! We will notify you once confirmed.');
+      navigate('/customer/tracking');
+    } catch {
+      setSubmitting(false);
+      toast.error('Could not submit your order. Please try again.');
+    }
   };
 
   const formattedDeliveryDate = pending?.deliveryDate
@@ -110,8 +118,8 @@ function CashConfirmView({ pending }: { pending: any }) {
         </Card>
 
         <div className="pt-2">
-          <Button onClick={handleConfirm} className="w-full brand-button h-14 text-lg">
-            Confirm & Submit Order
+          <Button onClick={handleConfirm} disabled={submitting} className="w-full brand-button h-14 text-lg">
+            {submitting ? 'Submitting…' : 'Confirm & Submit Order'}
           </Button>
           <p className="text-xs text-center text-gray-500 mt-3">
             Orders require admin approval before processing

@@ -46,9 +46,11 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
-    // Daily order-number counters: admin only (used to generate finalized order numbers)
+    // Daily order-number counters: any signed-in user can increment (customers assign
+    // their own finalized number right after a successful online payment; admins do
+    // the same when approving a cash order) — the counter itself holds no sensitive data.
     match /counters/{counterId} {
-      allow read, write: if isAdmin();
+      allow read, write: if isSignedIn();
     }
   }
 }

@@ -2,16 +2,17 @@ import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
-import { CheckCircle2, Clock, XCircle } from 'lucide-react';
+import { CheckCircle2, Clock, XCircle, AlarmClockOff } from 'lucide-react';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { useCart } from '../../context/CartContext';
-import { createOrder } from '../../utils/db';
+import { createOrder, getNextDailyOrderSequence } from '../../utils/db';
+import { generateFinalOrderNumber, getDateKey } from '../../utils/business';
 
 export default function ToyyibPayReturnPage() {
   const navigate = useNavigate();
   const { clearCart } = useCart();
   const [searchParams] = useSearchParams();
-  const [outcome, setOutcome] = useState<'checking' | 'success' | 'failed' | 'pending' | 'lost'>('checking');
+  const [outcome, setOutcome] = useState<'checking' | 'success' | 'failed' | 'pending' | 'expired' | 'lost'>('checking');
   const started = useRef(false);
 
   const statusId = searchParams.get('status_id');
@@ -25,16 +26,27 @@ export default function ToyyibPayReturnPage() {
       const raw = sessionStorage.getItem('pendingOrder');
       if (!raw) { setOutcome('lost'); return; }
       const pendingOrder = JSON.parse(raw);
+      // Removed synchronously (before the await) so a refresh mid-write can't
+      // re-read a still-present pendingOrder and create a duplicate order.
+      sessionStorage.removeItem('pendingOrder');
+      sessionStorage.removeItem('paymentExpiresAt');
 
       (async () => {
+        // ToyyibPay confirmed the money moved, so the order is created even if our
+        // local expiry timer had already run out — a real payment is never discarded.
+        // Online orders skip admin approval (see OrderManagementPage's updateStatus),
+        // so the finalized number has to be assigned here instead, the same way it
+        // would be when an admin approves a cash order.
+        const sequence = await getNextDailyOrderSequence(getDateKey());
         await createOrder({
           ...pendingOrder,
           status: 'Order Received',
           paymentStatus: 'paid',
+          paidAt: new Date().toISOString(),
           transactionId: transactionId || null,
+          finalizedNumber: generateFinalOrderNumber(sequence),
         });
         clearCart();
-        sessionStorage.removeItem('pendingOrder');
         setOutcome('success');
         setTimeout(() => navigate('/customer/tracking'), 3000);
       })();
@@ -42,7 +54,8 @@ export default function ToyyibPayReturnPage() {
       // Payment failed — pendingOrder/cart were never touched, so the customer can retry as-is.
       setOutcome('failed');
     } else {
-      setOutcome('pending');
+      const expiresAt = Number(sessionStorage.getItem('paymentExpiresAt') || 0);
+      setOutcome(expiresAt && Date.now() > expiresAt ? 'expired' : 'pending');
     }
   }, [statusId, transactionId, navigate, clearCart]);
 
@@ -64,6 +77,16 @@ export default function ToyyibPayReturnPage() {
               <Clock className="w-16 h-16 text-orange-500 mx-auto" />
               <h2 className="text-2xl font-bold text-orange-800">Payment Not Completed</h2>
               <p className="text-gray-600">Your payment wasn't completed, so no order was placed. Your cart is still saved.</p>
+              <Button onClick={() => navigate('/customer/payment')} className="brand-button">
+                Try Again
+              </Button>
+            </>
+          )}
+          {outcome === 'expired' && (
+            <>
+              <AlarmClockOff className="w-16 h-16 text-orange-500 mx-auto" />
+              <h2 className="text-2xl font-bold text-orange-800">Payment Expired</h2>
+              <p className="text-gray-600">Your payment session expired before it was completed, so no order was placed. Your cart is still saved.</p>
               <Button onClick={() => navigate('/customer/payment')} className="brand-button">
                 Try Again
               </Button>

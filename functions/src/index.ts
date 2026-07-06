@@ -1,8 +1,4 @@
 import { onCall, HttpsError, onRequest } from 'firebase-functions/v2/https';
-import { initializeApp } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
-
-initializeApp();
 
 const TOYYIBPAY_BASE_URL = 'https://dev.toyyibpay.com'; // sandbox — switch to https://toyyibpay.com for production
 
@@ -29,16 +25,13 @@ export const createToyyibPayBill = onCall(
       throw new HttpsError('invalid-argument', 'Invalid amount.');
     }
 
-    const db = getFirestore();
-    const settingsSnap = await db.collection('settings').doc('business').get();
-    const settings = settingsSnap.data() || {};
-    const { toyyibpaySecretKey, toyyibpayCategoryCode } = settings as {
-      toyyibpaySecretKey?: string;
-      toyyibpayCategoryCode?: string;
-    };
+    // Credentials live in functions/.env (server-only — never sent to Firestore or
+    // the browser) so they're set via `firebase deploy --only functions`, not the app UI.
+    const toyyibpaySecretKey = process.env.TOYYIBPAY_SECRET_KEY;
+    const toyyibpayCategoryCode = process.env.TOYYIBPAY_CATEGORY_CODE;
 
     if (!toyyibpaySecretKey || !toyyibpayCategoryCode) {
-      throw new HttpsError('failed-precondition', 'ToyyibPay is not configured. Please set it up in Admin Settings.');
+      throw new HttpsError('failed-precondition', 'ToyyibPay is not configured. Set TOYYIBPAY_SECRET_KEY and TOYYIBPAY_CATEGORY_CODE in functions/.env and redeploy.');
     }
 
     const reference = `dn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

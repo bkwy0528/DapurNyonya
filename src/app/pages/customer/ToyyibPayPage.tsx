@@ -12,6 +12,8 @@ interface ToyyibPayPageProps {
   user: User;
 }
 
+const PAYMENT_EXPIRY_MINUTES = 15;
+
 export default function ToyyibPayPage({ user }: ToyyibPayPageProps) {
   const navigate = useNavigate();
   const [error, setError] = useState('');
@@ -40,6 +42,7 @@ export default function ToyyibPayPage({ user }: ToyyibPayPageProps) {
 
         // pendingOrder / cart are left untouched until ToyyibPayReturnPage confirms
         // success — that way a failed or abandoned payment never loses the customer's cart.
+        sessionStorage.setItem('paymentExpiresAt', String(Date.now() + PAYMENT_EXPIRY_MINUTES * 60 * 1000));
         window.location.href = result.data.paymentUrl;
       } catch {
         setError('Could not start payment. Please go back and try again.');

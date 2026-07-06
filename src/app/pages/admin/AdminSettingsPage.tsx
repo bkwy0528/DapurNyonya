@@ -20,8 +20,6 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
   const [businessDescription, setBusinessDescription] = useState('Homemade Dumplings & Snacks');
   const [contactPhone, setContactPhone] = useState('+60 12-345 6789');
   const [contactEmail, setContactEmail] = useState('dapurnyonya@email.com');
-  const [toyyibpaySecretKey, setToyyibpaySecretKey] = useState('');
-  const [toyyibpayCategoryCode, setToyyibpayCategoryCode] = useState('');
   const [aiEnabled, setAiEnabled] = useState(false);
   const [announcementEnabled, setAnnouncementEnabled] = useState(true);
   const [announcementTitle, setAnnouncementTitle] = useState('Festive Season Orders Open!');
@@ -34,8 +32,6 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
       if (s.businessDescription) setBusinessDescription(s.businessDescription);
       if (s.contactPhone) setContactPhone(s.contactPhone);
       if (s.contactEmail) setContactEmail(s.contactEmail);
-      if (s.toyyibpaySecretKey) setToyyibpaySecretKey(s.toyyibpaySecretKey);
-      if (s.toyyibpayCategoryCode) setToyyibpayCategoryCode(s.toyyibpayCategoryCode);
       if (s.aiEnabled !== undefined) setAiEnabled(s.aiEnabled);
       if (s.announcementEnabled !== undefined) setAnnouncementEnabled(s.announcementEnabled);
       if (s.announcementTitle) setAnnouncementTitle(s.announcementTitle);
@@ -44,18 +40,21 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
   }, []);
 
   const handleSave = async () => {
-    await saveSettings({
-      businessName,
-      businessDescription,
-      contactPhone,
-      contactEmail,
-      toyyibpaySecretKey,
-      toyyibpayCategoryCode,
-      aiEnabled,
-      announcementEnabled,
-      announcementTitle,
-      announcementText,
-    });
+    try {
+      await saveSettings({
+        businessName,
+        businessDescription,
+        contactPhone,
+        contactEmail,
+        aiEnabled,
+        announcementEnabled,
+        announcementTitle,
+        announcementText,
+      });
+    } catch {
+      toast.error('Could not save settings. Please try again.');
+      return;
+    }
     toast.success('Settings saved successfully!');
   };
 
@@ -98,23 +97,6 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
                 <Input id="contactEmail" type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="your@email.com" className="h-12 text-base" />
               </div>
             </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>ToyyibPay Configuration</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="toyyibpaySecretKey" className="text-base">User Secret Key</Label>
-              <Input id="toyyibpaySecretKey" value={toyyibpaySecretKey} onChange={(e) => setToyyibpaySecretKey(e.target.value)} placeholder="Get from ToyyibPay dashboard → Profile" className="h-12 text-base" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="toyyibpayCategoryCode" className="text-base">Category Code</Label>
-              <Input id="toyyibpayCategoryCode" value={toyyibpayCategoryCode} onChange={(e) => setToyyibpayCategoryCode(e.target.value)} placeholder="Get from ToyyibPay dashboard → Category" className="h-12 text-base" />
-            </div>
-            <p className="text-sm text-gray-600">Sign up at toyyibpay.com, create a Category, then copy these credentials here.</p>
           </CardContent>
         </Card>
 
