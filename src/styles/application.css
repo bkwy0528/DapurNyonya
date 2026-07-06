@@ -132,6 +132,14 @@
     @apply bg-red-100 text-red-700;
   }
 
+  .status-badge--out {
+    @apply bg-sky-100 text-sky-700;
+  }
+
+  .status-badge--cancelled {
+    @apply bg-gray-200 text-gray-600;
+  }
+
   /* Product availability badges — separate from order status badges */
   .status-badge--available {
     @apply bg-green-100 text-green-700 hover:bg-green-100;

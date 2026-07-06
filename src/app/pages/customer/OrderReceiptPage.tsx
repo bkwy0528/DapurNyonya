@@ -23,7 +23,7 @@ const PAYMENT_LABELS: Record<string, string> = {
 function paymentStatus(order: any): { label: string; colour: string } {
   if (order.paymentStatus === 'paid') return { label: 'Paid Online', colour: 'text-green-700 bg-green-100' };
   if (order.paymentMethod === 'cash') return { label: 'Cash — Pay on Arrival', colour: 'text-yellow-800 bg-yellow-100' };
-  const verified = ['Order Received', 'In Preparation', 'Ready for Pickup', 'Delivered'].includes(order.status);
+  const verified = ['Order Received', 'In Preparation', 'Ready for Pickup', 'Out for Delivery', 'Delivered'].includes(order.status);
   return verified
     ? { label: 'Payment Verified', colour: 'text-green-700 bg-green-100' }
     : { label: 'Pending Verification', colour: 'text-orange-700 bg-orange-100' };

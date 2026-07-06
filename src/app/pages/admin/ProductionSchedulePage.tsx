@@ -67,7 +67,7 @@ export default function ProductionSchedulePage({ user: _user }: ProductionSchedu
     const [orders, limits] = await Promise.all([getOrders(), getDailyLimits()]);
     const grouped: GroupedOrders = {};
     orders
-      .filter((order: any) => order.status !== 'Rejected' && order.deliveryDate)
+      .filter((order: any) => order.status !== 'Rejected' && order.status !== 'Cancelled' && order.deliveryDate)
       .forEach((order: any) => {
         if (!grouped[order.deliveryDate]) grouped[order.deliveryDate] = [];
         grouped[order.deliveryDate].push(order);

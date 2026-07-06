@@ -1,17 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
+import { Input } from '../../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Textarea } from '../../components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
 
-import { ArrowLeft, CheckCircle, Eye, Check, X } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Eye, Check, X, Search, ChevronDown, ChevronUp, Truck } from 'lucide-react';
 import { toast } from 'sonner';
 import { User } from '../../App';
 import { generateFinalOrderNumber, getDateKey } from '../../utils/business';
-import { getOrders, updateOrderFields, getNextDailyOrderSequence } from '../../utils/db';
+import { getOrders, updateOrderFields, updateOrderFieldsReleasingSlot, getNextDailyOrderSequence } from '../../utils/db';
 import { getStatusStyle } from '../../utils/statusStyles';
 
 interface OrderManagementPageProps {
@@ -20,8 +21,9 @@ interface OrderManagementPageProps {
 
 export default function OrderManagementPage({ user: _user }: OrderManagementPageProps) {
   const [orders, setOrders] = useState<any[]>([]);
-  const [filteredOrders, setFilteredOrders] = useState<any[]>([]);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [adminNotes, setAdminNotes] = useState('');
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
@@ -30,16 +32,25 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
 
   useEffect(() => { loadOrders(); }, []);
 
-  useEffect(() => {
-    setFilteredOrders(statusFilter === 'all' ? orders : orders.filter(o => o.status === statusFilter));
-  }, [statusFilter, orders]);
-
   const loadOrders = async () => {
     const all = await getOrders();
     const reversed = [...all].sort((a, b) => new Date(b.orderDate || 0).getTime() - new Date(a.orderDate || 0).getTime());
     setOrders(reversed);
-    setFilteredOrders(reversed);
   };
+
+  const filteredOrders = useMemo(() => {
+    let result = statusFilter === 'all' ? orders : orders.filter(o => o.status === statusFilter);
+    const term = searchTerm.trim().toLowerCase();
+    if (term) {
+      result = result.filter(o =>
+        (o.customerName || '').toLowerCase().includes(term)
+        || (o.customerPhone || '').toLowerCase().includes(term)
+        || (o.finalizedNumber || '').toLowerCase().includes(term)
+        || (o.id || '').toLowerCase().includes(term)
+      );
+    }
+    return result;
+  }, [orders, statusFilter, searchTerm]);
 
   const updateStatus = async (orderId: string, newStatus: string) => {
     const updates: Record<string, any> = { status: newStatus };
@@ -63,8 +74,9 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
     setAdminNotes('');
   };
 
-  const rejectOrder = async (orderId: string) => {
-    await updateOrderFields(orderId, { status: 'Rejected', rejectReason });
+  const rejectOrder = async (order: any) => {
+    // Rejecting frees up the booked slot on that delivery date
+    await updateOrderFieldsReleasingSlot(order.id, { status: 'Rejected', rejectReason }, order.deliveryDate);
     await loadOrders();
     toast.success('Order rejected!');
     setRejectDialogOpen(false);
@@ -90,10 +102,18 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
         <Card>
           <CardContent className="p-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-              <span className="text-gray-700 font-medium">Filter by Status:</span>
+            <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4">
+              <div className="relative w-full lg:flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <Input
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search by customer name, phone, or order number"
+                  className="pl-12 h-12 text-base"
+                />
+              </div>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full sm:w-64 h-12 text-base">
+                <SelectTrigger className="w-full lg:w-64 h-12 text-base">
                   <SelectValue placeholder="Select status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -102,11 +122,13 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
                   <SelectItem value="Order Received">Order Received</SelectItem>
                   <SelectItem value="In Preparation">In Preparation</SelectItem>
                   <SelectItem value="Ready for Pickup">Ready for Pickup</SelectItem>
+                  <SelectItem value="Out for Delivery">Out for Delivery</SelectItem>
                   <SelectItem value="Delivered">Delivered</SelectItem>
                   <SelectItem value="Rejected">Rejected</SelectItem>
+                  <SelectItem value="Cancelled">Cancelled</SelectItem>
                 </SelectContent>
               </Select>
-              <Badge variant="outline" className="text-base px-4 py-2">{filteredOrders.length} orders</Badge>
+              <Badge variant="outline" className="text-base px-4 py-2 shrink-0">{filteredOrders.length} orders</Badge>
             </div>
           </CardContent>
         </Card>
@@ -116,20 +138,31 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
         {filteredOrders.length === 0 ? (
           <Card><CardContent className="p-12 text-center"><p className="text-gray-600 text-lg">No orders found</p></CardContent></Card>
         ) : (
-          filteredOrders.map((order) => (
+          filteredOrders.map((order) => {
+            const isExpanded = expandedOrderId === order.id;
+            return (
             <Card key={order.id} className="overflow-hidden">
-              <CardHeader className="bg-gray-50">
+              <CardHeader
+                className="bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors"
+                onClick={() => setExpandedOrderId(isExpanded ? null : order.id)}
+              >
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                   <div>
                     <CardTitle className="text-xl">{getOrderLabel(order)}</CardTitle>
                     <p className="text-sm text-gray-600 mt-1">{order.customerName} - {order.customerPhone}</p>
                     <p className="text-sm text-gray-600">
                       Order Date: {new Date(order.orderDate || Date.now()).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {order.deliveryDate && <> · {order.deliveryMethod === 'delivery' ? 'Delivery' : 'Pickup'}: {new Date(order.deliveryDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</>}
                     </p>
                   </div>
-                  <Badge className={getStatusStyle(order.status)}>{order.status}</Badge>
+                  <div className="flex items-center gap-3">
+                    <span className="font-semibold text-orange-600">RM {(order.total || 0).toFixed(2)}</span>
+                    <Badge className={getStatusStyle(order.status)}>{order.status}</Badge>
+                    {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-500" /> : <ChevronDown className="w-5 h-5 text-gray-500" />}
+                  </div>
                 </div>
               </CardHeader>
+              {isExpanded && (
               <CardContent className="p-6 space-y-4">
                 <div className="space-y-3">
                   <h4 className="font-semibold text-gray-900">Order Items:</h4>
@@ -217,7 +250,7 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
                   </div>
                 )}
 
-                {order.status !== 'Rejected' && order.status !== 'Delivered' && (
+                {!['Rejected', 'Delivered', 'Cancelled'].includes(order.status) && (
                   <div className="pt-4 border-t border-gray-200">
                     <h4 className="font-semibold text-gray-900 mb-3">Update Order Status:</h4>
                     <div className="flex flex-wrap gap-2">
@@ -235,13 +268,20 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
                         <Button onClick={() => updateStatus(order.id, 'In Preparation')} className="brand-button">Start Preparation</Button>
                       )}
                       {order.status === 'In Preparation' && (
-                        <Button onClick={() => updateStatus(order.id, order.deliveryMethod === 'pickup' ? 'Ready for Pickup' : 'Delivered')} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700">
-                          <CheckCircle className="w-4 h-4 mr-2" />Mark as {order.deliveryMethod === 'pickup' ? 'Ready' : 'Delivered'}
+                        <Button onClick={() => updateStatus(order.id, order.deliveryMethod === 'pickup' ? 'Ready for Pickup' : 'Out for Delivery')} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700">
+                          {order.deliveryMethod === 'pickup'
+                            ? <><CheckCircle className="w-4 h-4 mr-2" />Mark as Ready</>
+                            : <><Truck className="w-4 h-4 mr-2" />Send Out for Delivery</>}
                         </Button>
                       )}
                       {order.status === 'Ready for Pickup' && (
                         <Button onClick={() => updateStatus(order.id, 'Delivered')} className="success-button">
                           <CheckCircle className="w-4 h-4 mr-2" />Mark as Picked Up
+                        </Button>
+                      )}
+                      {order.status === 'Out for Delivery' && (
+                        <Button onClick={() => updateStatus(order.id, 'Delivered')} className="success-button">
+                          <CheckCircle className="w-4 h-4 mr-2" />Mark as Delivered
                         </Button>
                       )}
                     </div>
@@ -260,8 +300,10 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
                   </div>
                 )}
               </CardContent>
+              )}
             </Card>
-          ))
+            );
+          })
         )}
       </div>
 
@@ -287,7 +329,7 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
             <Textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="e.g., Out of stock, Cannot meet delivery date..." className="min-h-32" />
             <div className="flex gap-3">
               <Button variant="outline" onClick={() => { setRejectDialogOpen(false); setRejectReason(''); setOrderToReject(null); }} className="flex-1">Cancel</Button>
-              <Button variant="destructive" onClick={() => orderToReject && rejectOrder(orderToReject.id)} disabled={!rejectReason.trim()} className="flex-1">Reject Order</Button>
+              <Button variant="destructive" onClick={() => orderToReject && rejectOrder(orderToReject)} disabled={!rejectReason.trim()} className="flex-1">Reject Order</Button>
             </div>
           </div>
         </DialogContent>

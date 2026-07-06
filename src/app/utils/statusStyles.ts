@@ -3,8 +3,10 @@ export const STATUS_STYLES: Record<string, string> = {
   'Order Received': 'status-badge--received',
   'In Preparation': 'status-badge--preparing',
   'Ready for Pickup': 'status-badge--ready',
+  'Out for Delivery': 'status-badge--out',
   'Delivered': 'status-badge--delivered',
   'Rejected': 'status-badge--rejected',
+  'Cancelled': 'status-badge--cancelled',
 };
 
 export function getStatusStyle(status: string): string {

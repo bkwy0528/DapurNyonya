@@ -16,11 +16,28 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Orders: customers can create + read their own, admin can read/write all
+    // Orders: customers can create + read their own, admin can read/write all.
+    // Customers may additionally cancel their own order, but only while it is
+    // still Pending Approval and only by setting status to Cancelled.
     match /orders/{orderId} {
       allow read: if isAdmin() || (isSignedIn() && resource.data.customerId == request.auth.uid);
       allow create: if isSignedIn() && request.resource.data.customerId == request.auth.uid;
-      allow update, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        isSignedIn()
+        && resource.data.customerId == request.auth.uid
+        && resource.data.status == 'Pending Approval'
+        && request.resource.data.status == 'Cancelled'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledAt'])
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Per-date order counters: public read so customers can check remaining
+    // capacity at checkout; any signed-in user can write because the counter is
+    // maintained client-side alongside order creation/cancellation.
+    match /orderCounts/{dateKey} {
+      allow read: if true;
+      allow write: if isSignedIn();
     }
 
     // Settings: anyone can read (business hours / delivery info shown to customers), only admin writes

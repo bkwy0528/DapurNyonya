@@ -1,7 +1,7 @@
 import { db } from '../../firebase';
 import {
   collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
-  query, where, addDoc, runTransaction,
+  query, where, addDoc, runTransaction, writeBatch, increment,
 } from 'firebase/firestore';
 
 export const ADMIN_EMAIL = 'yikbryan0528work@gmail.com';
@@ -75,9 +75,17 @@ export async function getOrderById(orderId: string): Promise<any | null> {
   return snap.exists() ? snap.data() : null;
 }
 
+// Creating an order also increments a public per-date counter (orderCounts/{date})
+// in the same batch, so customers — who cannot read other people's orders — can
+// still see and enforce daily capacity at checkout.
 export async function createOrder(order: any): Promise<string> {
   const id = doc(collection(db, 'orders')).id;
-  await setDoc(doc(db, 'orders', id), { ...order, id });
+  const batch = writeBatch(db);
+  batch.set(doc(db, 'orders', id), { ...order, id });
+  if (order.deliveryDate) {
+    batch.set(doc(db, 'orderCounts', order.deliveryDate), { count: increment(1) }, { merge: true });
+  }
+  await batch.commit();
   return id;
 }
 
@@ -85,10 +93,20 @@ export async function updateOrderFields(id: string, updates: Record<string, any>
   await updateDoc(doc(db, 'orders', id), updates);
 }
 
+// For status changes that free up a booked slot (admin reject, customer cancel):
+// updates the order and decrements that date's counter atomically.
+export async function updateOrderFieldsReleasingSlot(id: string, updates: Record<string, any>, deliveryDate?: string): Promise<void> {
+  const batch = writeBatch(db);
+  batch.update(doc(db, 'orders', id), updates);
+  if (deliveryDate) {
+    batch.set(doc(db, 'orderCounts', deliveryDate), { count: increment(-1) }, { merge: true });
+  }
+  await batch.commit();
+}
+
 export async function getOrderCountForDate(date: string): Promise<number> {
-  const q = query(collection(db, 'orders'), where('deliveryDate', '==', date));
-  const snap = await getDocs(q);
-  return snap.docs.filter(d => d.data().status !== 'Rejected').length;
+  const snap = await getDoc(doc(db, 'orderCounts', date));
+  return snap.exists() ? Math.max(0, (snap.data() as any).count || 0) : 0;
 }
 
 // Atomically returns 1, 2, 3... per dateKey (e.g. "260706") so concurrent
