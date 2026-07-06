@@ -3,10 +3,8 @@ import { useParams, Link } from 'react-router';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
-import { ArrowLeft, ShoppingCart, Package } from 'lucide-react';
+import { ArrowLeft, ShoppingCart } from 'lucide-react';
 import { User } from '../../App';
-import { useCart } from '../../context/CartContext';
-import { toast } from 'sonner';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { getProducts } from '../../utils/db';
 
@@ -16,7 +14,6 @@ interface ProductDetailPageProps {
 
 export default function ProductDetailPage({ user: _user }: ProductDetailPageProps) {
   const { productId } = useParams();
-  const { addToCart } = useCart();
   const [product, setProduct] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -107,25 +104,12 @@ export default function ProductDetailPage({ user: _user }: ProductDetailPageProp
             </div>
 
             {product.available && (
-              <div className="flex flex-col sm:flex-row gap-3">
-                <Button
-                  size="lg"
-                  onClick={() => {
-                    addToCart({ productId: product.id, name: product.name, price: product.price, quantity: 1, image: product.image, unit: product.unit, prepDays: product.prepDays });
-                    toast.success('Added to cart!');
-                  }}
-                  className="flex-1 h-14 text-lg brand-button"
-                >
+              <Link to={`/customer/order/${product.id}`} className="block">
+                <Button size="lg" className="w-full h-14 text-lg brand-button">
                   <ShoppingCart className="w-5 h-5 mr-2" />
-                  Add to Cart
+                  Order This Item
                 </Button>
-                <Link to={`/customer/order/${product.id}`} className="flex-1">
-                  <Button size="lg" className="w-full h-14 text-lg success-button">
-                    <Package className="w-5 h-5 mr-2" />
-                    Place Order
-                  </Button>
-                </Link>
-              </div>
+              </Link>
             )}
           </CardContent>
         </Card>

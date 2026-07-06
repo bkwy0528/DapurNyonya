@@ -98,10 +98,10 @@ export default function CustomerHomePage({ user }: CustomerHomePageProps) {
                     <div className="text-2xl font-bold text-orange-600">RM {product.price.toFixed(2)}</div>
                     <div className="flex flex-wrap gap-3 w-full sm:w-auto">
                       <Link to={`/customer/product/${product.id}`} className="flex-1 sm:flex-none">
-                        <Button className="w-full sm:w-auto brand-button">View Product</Button>
+                        <Button variant="outline" className="w-full sm:w-auto border-2">View Details</Button>
                       </Link>
                       <Link to={`/customer/order/${product.id}`} className="flex-1 sm:flex-none">
-                        <Button className="w-full sm:w-auto success-button">Add to Cart</Button>
+                        <Button className="w-full sm:w-auto brand-button">Order This</Button>
                       </Link>
                     </div>
                   </div>

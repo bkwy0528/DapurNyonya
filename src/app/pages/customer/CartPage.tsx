@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
 import { ArrowLeft, Plus, Minus, Trash2, ShoppingCart } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { User } from '../../App';
@@ -13,6 +15,15 @@ interface CartPageProps {
 export default function CartPage({ user }: CartPageProps) {
   const navigate = useNavigate();
   const { cartItems, updateQuantity, removeFromCart, getCartTotal } = useCart();
+  const [itemToRemove, setItemToRemove] = useState<{ productId: string; name: string } | null>(null);
+
+  const confirmRemove = () => {
+    if (itemToRemove) {
+      removeFromCart(itemToRemove.productId);
+      toast.success(`${itemToRemove.name} removed from cart`);
+      setItemToRemove(null);
+    }
+  };
 
   const handleCheckout = () => {
     if (cartItems.length === 0) {
@@ -100,10 +111,11 @@ export default function CartPage({ user }: CartPageProps) {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => removeFromCart(item.productId)}
+                        onClick={() => setItemToRemove({ productId: item.productId, name: item.name })}
                         className="text-red-600 hover:text-red-700 hover:bg-red-50"
                       >
-                        <Trash2 className="w-5 h-5" />
+                        <Trash2 className="w-5 h-5 mr-1" />
+                        Remove
                       </Button>
                     </div>
 
@@ -114,6 +126,7 @@ export default function CartPage({ user }: CartPageProps) {
                           variant="outline"
                           size="sm"
                           onClick={() => updateQuantity(item.productId, item.quantity - 1)}
+                          disabled={item.quantity <= 1}
                           className="w-10 h-10 p-0 border-2"
                         >
                           <Minus className="w-4 h-4" />
@@ -164,6 +177,26 @@ export default function CartPage({ user }: CartPageProps) {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={itemToRemove !== null} onOpenChange={(open) => !open && setItemToRemove(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove item from cart?</DialogTitle>
+          </DialogHeader>
+          <p className="text-gray-700">
+            Are you sure you want to remove <strong>{itemToRemove?.name}</strong> from your cart?
+          </p>
+          <div className="flex gap-3 pt-2">
+            <Button variant="outline" onClick={() => setItemToRemove(null)} className="flex-1 h-12">
+              Keep It
+            </Button>
+            <Button variant="destructive" onClick={confirmRemove} className="flex-1 h-12">
+              <Trash2 className="w-4 h-4 mr-2" />
+              Remove
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
