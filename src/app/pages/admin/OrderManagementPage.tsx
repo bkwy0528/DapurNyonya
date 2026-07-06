@@ -10,8 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../componen
 import { ArrowLeft, CheckCircle, Eye, Check, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { User } from '../../App';
-import { generateFinalOrderNumber } from '../../utils/business';
-import { getOrders, updateOrderFields } from '../../utils/db';
+import { generateFinalOrderNumber, getDateKey } from '../../utils/business';
+import { getOrders, updateOrderFields, getNextDailyOrderSequence } from '../../utils/db';
 import { getStatusStyle } from '../../utils/statusStyles';
 
 interface OrderManagementPageProps {
@@ -45,7 +45,10 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
     const updates: Record<string, any> = { status: newStatus };
     if (newStatus === 'Order Received') {
       const order = orders.find(o => o.id === orderId);
-      if (order && !order.finalizedNumber) updates.finalizedNumber = generateFinalOrderNumber();
+      if (order && !order.finalizedNumber) {
+        const sequence = await getNextDailyOrderSequence(getDateKey());
+        updates.finalizedNumber = generateFinalOrderNumber(sequence);
+      }
     }
     await updateOrderFields(orderId, updates);
     await loadOrders();

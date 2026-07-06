@@ -1,7 +1,7 @@
 import { db } from '../../firebase';
 import {
   collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
-  query, where, addDoc,
+  query, where, addDoc, runTransaction,
 } from 'firebase/firestore';
 
 export const ADMIN_EMAIL = 'yikbryan0528work@gmail.com';
@@ -89,6 +89,18 @@ export async function getOrderCountForDate(date: string): Promise<number> {
   const q = query(collection(db, 'orders'), where('deliveryDate', '==', date));
   const snap = await getDocs(q);
   return snap.docs.filter(d => d.data().status !== 'Rejected').length;
+}
+
+// Atomically returns 1, 2, 3... per dateKey (e.g. "260706") so concurrent
+// approvals never get the same finalized order number.
+export async function getNextDailyOrderSequence(dateKey: string): Promise<number> {
+  const counterRef = doc(db, 'counters', `orders-${dateKey}`);
+  return runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(counterRef);
+    const next = (snap.exists() ? (snap.data() as any).count : 0) + 1;
+    transaction.set(counterRef, { count: next });
+    return next;
+  });
 }
 
 // ─── Settings ────────────────────────────────────────────────────────────────

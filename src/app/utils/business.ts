@@ -6,15 +6,19 @@ export function validatePassword(password: string) {
   return errors;
 }
 
-export function generateFinalOrderNumber() {
-  const now = new Date();
-  const YY = String(now.getFullYear()).slice(-2);
-  const MM = String(now.getMonth() + 1).padStart(2, '0');
-  const DD = String(now.getDate()).padStart(2, '0');
-  // Use random 4-char suffix instead of localStorage counter to avoid
-  // duplicate numbers when admin switches devices or clears browser data.
-  const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
-  return `DN-${YY}${MM}${DD}-${suffix}`;
+export function getDateKey(date: Date = new Date()) {
+  const YY = String(date.getFullYear()).slice(-2);
+  const MM = String(date.getMonth() + 1).padStart(2, '0');
+  const DD = String(date.getDate()).padStart(2, '0');
+  return `${YY}${MM}${DD}`;
+}
+
+// Sequence comes from an atomic per-day Firestore counter (see
+// getNextDailyOrderSequence in db.ts) so the first order approved each day is 01,
+// the next is 02, etc. — makes approval order visible at a glance.
+export function generateFinalOrderNumber(sequence: number) {
+  const seq = String(sequence).padStart(2, '0');
+  return `DN-${getDateKey()}-${seq}`;
 }
 
 export function getMaxPrepDaysFromCart(cartItems: any[]) {

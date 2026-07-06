@@ -45,5 +45,10 @@ service cloud.firestore {
     match /adminProfile/{docId} {
       allow read, write: if isAdmin();
     }
+
+    // Daily order-number counters: admin only (used to generate finalized order numbers)
+    match /counters/{counterId} {
+      allow read, write: if isAdmin();
+    }
   }
 }
