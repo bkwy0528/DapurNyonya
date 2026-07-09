@@ -21,5 +21,20 @@
         "destination": "/index.html"
       }
     ]
+  },
+  "emulators": {
+    "firestore": {
+      "port": 8089
+    },
+    "auth": {
+      "port": 9099
+    },
+    "functions": {
+      "port": 5001
+    },
+    "ui": {
+      "enabled": false
+    },
+    "singleProjectMode": true
   }
 }

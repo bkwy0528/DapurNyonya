@@ -5,3 +5,9 @@ dist
 .agents
 functions/.env
 functions/lib
+
+# testing
+coverage
+playwright-report
+test-results
+*-debug.log
