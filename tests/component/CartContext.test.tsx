@@ -46,15 +46,21 @@ describe('CartContext', () => {
     expect(result.current.cartItems[0].quantity).toBe(3);
   });
 
-  it('overwrites (does not merge) notes when re-adding with a new note', () => {
-    // Documents current behavior, not necessarily desired behavior — see QA
-    // strategy §2.2 / regression suite §20 item 3: re-adding a cart line with
-    // different notes replaces the old note rather than merging or asking.
-    // If this is ever changed deliberately, update this test alongside it.
+  it('merges notes when re-adding with a new note', () => {
+    // Re-adding a cart line with a different note appends rather than replaces —
+    // an earlier note (e.g. an allergy warning) must never be silently lost.
+    // Fixed 2026-07-09 per QA audit §2 "re-adding discards special instructions".
     const { result } = renderHook(() => useCart(), { wrapper });
     act(() => result.current.addToCart(item({ notes: 'no peanuts' })));
     act(() => result.current.addToCart(item({ notes: 'extra spicy' })));
-    expect(result.current.cartItems[0].notes).toBe('extra spicy');
+    expect(result.current.cartItems[0].notes).toBe('no peanuts; extra spicy');
+  });
+
+  it('keeps the existing note when re-adding without a note', () => {
+    const { result } = renderHook(() => useCart(), { wrapper });
+    act(() => result.current.addToCart(item({ notes: 'no peanuts' })));
+    act(() => result.current.addToCart(item({ notes: '' })));
+    expect(result.current.cartItems[0].notes).toBe('no peanuts');
   });
 
   it('removes a product from the cart', () => {
