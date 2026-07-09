@@ -17,7 +17,6 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import CustomerHomePage from './pages/customer/CustomerHomePage';
 import ProductDetailPage from './pages/customer/ProductDetailPage';
 import ProductOrderPage from './pages/customer/ProductOrderPage';
-import OrderSummaryPage from './pages/customer/OrderSummaryPage';
 import CustomerOrderTrackingPage from './pages/customer/CustomerOrderTrackingPage';
 import ProfilePage from './pages/ProfilePage';
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -136,9 +135,8 @@ function App() {
                     <Route path="cart" element={<CartPage user={user} />} />
                     <Route path="checkout" element={<CheckoutPage user={user} />} />
                     <Route path="payment" element={<ToyyibPayPage user={user} />} />
-                    <Route path="payment-return" element={<ToyyibPayReturnPage />} />
+                    <Route path="payment-return" element={<ToyyibPayReturnPage user={user} />} />
                     <Route path="order-confirmation" element={<OrderConfirmationPage />} />
-                    <Route path="order-summary" element={<OrderSummaryPage user={user} />} />
                     <Route path="tracking" element={<CustomerOrderTrackingPage user={user} />} />
                     <Route path="receipt/:orderId" element={<OrderReceiptPage user={user} />} />
                     <Route path="profile" element={<ProfilePage user={user} onLogout={handleLogout} onProfileUpdate={handleProfileUpdate} />} />

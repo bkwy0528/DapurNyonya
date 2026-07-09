@@ -75,19 +75,6 @@ export async function getOrderById(orderId: string): Promise<any | null> {
   return snap.exists() ? snap.data() : null;
 }
 
-// Creating an order also increments a public per-date counter (orderCounts/{date})
-// in the same batch, so customers — who cannot read other people's orders — can
-// still see and enforce daily capacity at checkout.
-export async function createOrder(order: any): Promise<string> {
-  const id = doc(collection(db, 'orders')).id;
-  const batch = writeBatch(db);
-  batch.set(doc(db, 'orders', id), { ...order, id });
-  if (order.deliveryDate) {
-    batch.set(doc(db, 'orderCounts', order.deliveryDate), { count: increment(1) }, { merge: true });
-  }
-  await batch.commit();
-  return id;
-}
 
 export async function updateOrderFields(id: string, updates: Record<string, any>): Promise<void> {
   await updateDoc(doc(db, 'orders', id), updates);

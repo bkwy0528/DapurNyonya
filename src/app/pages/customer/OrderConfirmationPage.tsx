@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
-import { ArrowLeft, Banknote } from 'lucide-react';
+import { ArrowLeft, Banknote, CheckCircle2 } from 'lucide-react';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { useCart } from '../../context/CartContext';
 import { toast } from 'sonner';
-import { createOrder } from '../../utils/db';
+import { submitOrder } from '../../utils/submitOrder';
 
 // ─── Cash payment confirmation ────────────────────────────────────────────────
 
@@ -14,21 +14,53 @@ function CashConfirmView({ pending }: { pending: any }) {
   const navigate = useNavigate();
   const { clearCart } = useCart();
   const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
   const handleConfirm = async () => {
     if (submitting) return;
     setSubmitting(true);
     try {
-      await createOrder({ ...pending, status: 'Pending Approval' });
+      await submitOrder({
+        clientRequestId: pending.clientRequestId,
+        items: (pending.items || []).map((item: any) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+          notes: item.notes,
+        })),
+        deliveryMethod: pending.deliveryMethod,
+        deliveryAddress: pending.deliveryAddress,
+        postalCode: pending.postalCode,
+        deliveryCharge: pending.deliveryCharge,
+        contactPhone: pending.customerPhone,
+        specialInstructions: pending.specialInstructions,
+        paymentMethod: pending.paymentMethod,
+        paymentNote: pending.paymentNote,
+        deliveryDate: pending.deliveryDate,
+        customerName: pending.customerName,
+      });
       sessionStorage.removeItem('pendingOrder');
       clearCart();
-      toast.success('Order submitted! We will notify you once confirmed.');
-      navigate('/customer/tracking');
+      setSubmitted(true);
+      setTimeout(() => navigate('/customer/tracking'), 3000);
     } catch {
       setSubmitting(false);
       toast.error('Could not submit your order. Please try again.');
     }
   };
+
+  if (submitted) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6">
+        <Card className="max-w-md w-full">
+          <CardContent className="p-8 text-center space-y-4">
+            <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto" />
+            <h2 className="text-2xl font-bold text-green-800">Order Submitted!</h2>
+            <p className="text-gray-600">Thank you for your order. We'll notify you once it's confirmed. Redirecting to your orders…</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const formattedDeliveryDate = pending?.deliveryDate
     ? new Date(`${pending.deliveryDate}T00:00:00`).toLocaleDateString('en-MY', {

@@ -43,7 +43,14 @@ export default function ToyyibPayPage({ user }: ToyyibPayPageProps) {
         // pendingOrder / cart are left untouched until ToyyibPayReturnPage confirms
         // success — that way a failed or abandoned payment never loses the customer's cart.
         sessionStorage.setItem('paymentExpiresAt', String(Date.now() + PAYMENT_EXPIRY_MINUTES * 60 * 1000));
-        window.location.href = result.data.paymentUrl;
+        // ToyyibPayReturnPage needs this to ask submitOrder() to check the
+        // server-recorded payment confirmation for this exact bill.
+        sessionStorage.setItem('pendingBillCode', result.data.billCode);
+        // replace (not href) so this auto-redirecting page never sits in browser
+        // history — otherwise pressing back from ToyyibPay's hosted page lands back
+        // here, silently creating a new bill and redirecting again instead of going
+        // to checkout.
+        window.location.replace(result.data.paymentUrl);
       } catch {
         setError('Could not start payment. Please go back and try again.');
       }

@@ -16,12 +16,17 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Orders: customers can create + read their own, admin can read/write all.
-    // Customers may additionally cancel their own order, but only while it is
-    // still Pending Approval and only by setting status to Cancelled.
+    // Orders: customers can read their own, admin can read/write all. Orders
+    // are never created directly by a client — the submitOrder Cloud Function
+    // (Admin SDK, bypasses these rules) recomputes prices from the real
+    // product catalog and, for online payments, checks a server-recorded
+    // payment confirmation before writing anything. That closes a prior gap
+    // where a client could set its own total or mark itself as paid.
+    // Customers may still cancel their own order client-side, but only while
+    // it is still Pending Approval and only by setting status to Cancelled.
     match /orders/{orderId} {
       allow read: if isAdmin() || (isSignedIn() && resource.data.customerId == request.auth.uid);
-      allow create: if isSignedIn() && request.resource.data.customerId == request.auth.uid;
+      allow create: if false;
       allow update: if isAdmin() || (
         isSignedIn()
         && resource.data.customerId == request.auth.uid
@@ -30,6 +35,13 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledAt'])
       );
       allow delete: if isAdmin();
+    }
+
+    // Payment confirmations: written only by the toyyibpayCallback Cloud
+    // Function (Admin SDK) when ToyyibPay itself reports a bill's outcome,
+    // and read only by submitOrder (also Admin SDK) — never by any client.
+    match /paymentConfirmations/{billCode} {
+      allow read, write: if false;
     }
 
     // Per-date order counters: public read so customers can check remaining

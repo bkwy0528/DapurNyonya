@@ -5,10 +5,14 @@ import { Button } from '../../components/ui/button';
 import { CheckCircle2, Clock, XCircle, AlarmClockOff } from 'lucide-react';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { useCart } from '../../context/CartContext';
-import { createOrder, getNextDailyOrderSequence } from '../../utils/db';
-import { generateFinalOrderNumber, getDateKey } from '../../utils/business';
+import { submitOrder } from '../../utils/submitOrder';
+import { User } from '../../App';
 
-export default function ToyyibPayReturnPage() {
+interface ToyyibPayReturnPageProps {
+  user: User;
+}
+
+export default function ToyyibPayReturnPage({ user }: ToyyibPayReturnPageProps) {
   const navigate = useNavigate();
   const { clearCart } = useCart();
   const [searchParams] = useSearchParams();
@@ -23,32 +27,56 @@ export default function ToyyibPayReturnPage() {
     started.current = true;
 
     if (statusId === '1') {
-      const raw = sessionStorage.getItem('pendingOrder');
-      if (!raw) { setOutcome('lost'); return; }
-      const pendingOrder = JSON.parse(raw);
-      // Removed synchronously (before the await) so a refresh mid-write can't
-      // re-read a still-present pendingOrder and create a duplicate order.
-      sessionStorage.removeItem('pendingOrder');
-      sessionStorage.removeItem('paymentExpiresAt');
-
       (async () => {
-        // ToyyibPay confirmed the money moved, so the order is created even if our
-        // local expiry timer had already run out — a real payment is never discarded.
-        // Online orders skip admin approval (see OrderManagementPage's updateStatus),
-        // so the finalized number has to be assigned here instead, the same way it
-        // would be when an admin approves a cash order.
-        const sequence = await getNextDailyOrderSequence(getDateKey());
-        await createOrder({
-          ...pendingOrder,
-          status: 'Order Received',
-          paymentStatus: 'paid',
-          paidAt: new Date().toISOString(),
-          transactionId: transactionId || null,
-          finalizedNumber: generateFinalOrderNumber(sequence),
-        });
-        clearCart();
-        setOutcome('success');
-        setTimeout(() => navigate('/customer/tracking'), 3000);
+        try {
+          const raw = sessionStorage.getItem('pendingOrder');
+          const billCode = sessionStorage.getItem('pendingBillCode');
+          if (!raw || !billCode) { setOutcome('lost'); return; }
+          const pendingOrder = JSON.parse(raw);
+
+          // submitOrder() is the actual authority here — it only creates the
+          // order once it sees toyyibpayCallback's own server-recorded
+          // confirmation for this exact bill (never this page's URL params,
+          // which are just a client-side hint of what to try). It's also
+          // idempotent on both clientRequestId and billCode, so a reload or
+          // back-navigation landing here again after a previous run already
+          // succeeded just returns that same order instead of duplicating it
+          // or losing track of a payment that went through.
+          await submitOrder({
+            clientRequestId: pendingOrder.clientRequestId,
+            items: (pendingOrder.items || []).map((item: any) => ({
+              productId: item.productId,
+              quantity: item.quantity,
+              notes: item.notes,
+            })),
+            deliveryMethod: pendingOrder.deliveryMethod,
+            deliveryAddress: pendingOrder.deliveryAddress,
+            postalCode: pendingOrder.postalCode,
+            deliveryCharge: pendingOrder.deliveryCharge,
+            contactPhone: pendingOrder.customerPhone,
+            specialInstructions: pendingOrder.specialInstructions,
+            paymentMethod: pendingOrder.paymentMethod,
+            paymentNote: pendingOrder.paymentNote,
+            deliveryDate: pendingOrder.deliveryDate,
+            customerName: pendingOrder.customerName,
+            billCode,
+          });
+          // Only removed once the order write has actually succeeded — removing it
+          // beforehand meant a reload during the write would lose the recovery data
+          // without any guarantee the order had actually been saved.
+          sessionStorage.removeItem('pendingOrder');
+          sessionStorage.removeItem('paymentExpiresAt');
+          sessionStorage.removeItem('pendingBillCode');
+          clearCart();
+          setOutcome('success');
+          setTimeout(() => navigate('/customer/tracking'), 3000);
+        } catch (err) {
+          // A confirmed payment must never be left on an endless spinner — surface
+          // the reference so the customer has something concrete to give support,
+          // even though we couldn't save the order on this attempt.
+          console.error('Failed to finalize a confirmed ToyyibPay payment:', err);
+          setOutcome('lost');
+        }
       })();
     } else if (statusId === '3') {
       // Payment failed — pendingOrder/cart were never touched, so the customer can retry as-is.
@@ -57,7 +85,7 @@ export default function ToyyibPayReturnPage() {
       const expiresAt = Number(sessionStorage.getItem('paymentExpiresAt') || 0);
       setOutcome(expiresAt && Date.now() > expiresAt ? 'expired' : 'pending');
     }
-  }, [statusId, transactionId, navigate, clearCart]);
+  }, [statusId, transactionId, navigate, clearCart, user.id]);
 
   if (outcome === 'checking') return <LoadingSpinner />;
 
@@ -106,7 +134,10 @@ export default function ToyyibPayReturnPage() {
             <>
               <XCircle className="w-16 h-16 text-red-500 mx-auto" />
               <h2 className="text-2xl font-bold text-red-800">Something Went Wrong</h2>
-              <p className="text-gray-600">Payment was confirmed but we couldn't find your order details in this session. Please contact us with your payment reference.</p>
+              <p className="text-gray-600">Payment was confirmed but we couldn't save your order details. Please contact us with the reference below.</p>
+              {transactionId && (
+                <p className="font-mono text-sm bg-gray-100 rounded-lg p-3 break-all">{transactionId}</p>
+              )}
               <Button onClick={() => navigate('/customer/home')} className="brand-button">
                 Back to Home
               </Button>
