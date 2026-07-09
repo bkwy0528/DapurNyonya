@@ -11,7 +11,7 @@ import { Switch } from '../../components/ui/switch';
 import { ArrowLeft, Plus, Edit, Trash2, Upload, X, Wheat } from 'lucide-react';
 import { toast } from 'sonner';
 import { User } from '../../App';
-import { getProducts, saveProduct, deleteProduct } from '../../utils/db';
+import { getOrders, getProducts, saveProduct, deleteProduct } from '../../utils/db';
 import { compressImage } from '../../utils/image';
 
 interface ProductManagementPageProps {
@@ -41,8 +41,31 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+  const [outstandingUnits, setOutstandingUnits] = useState<number | null>(null);
   const [imagePreview, setImagePreview] = useState<string>('');
   const [duplicateNameWarning, setDuplicateNameWarning] = useState(false);
+
+  // When the delete dialog opens, check whether the product still appears in
+  // upcoming orders that need preparation — deleting it also deletes its recipe,
+  // which would silently drop those orders from Ingredient Planning.
+  useEffect(() => {
+    if (!productToDelete) { setOutstandingUnits(null); return; }
+    let cancelled = false;
+    const d = new Date();
+    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    getOrders()
+      .then(orders => {
+        if (cancelled) return;
+        const units = orders
+          .filter((o: any) => ['Pending Approval', 'Order Received', 'In Preparation'].includes(o.status) && o.deliveryDate && o.deliveryDate >= today)
+          .reduce((sum: number, o: any) => sum + (o.items || [])
+            .filter((it: any) => it.productId === productToDelete.id || it.name === productToDelete.name)
+            .reduce((s: number, it: any) => s + (it.quantity || 0), 0), 0);
+        setOutstandingUnits(units);
+      })
+      .catch(() => { if (!cancelled) setOutstandingUnits(0); });
+    return () => { cancelled = true; };
+  }, [productToDelete]);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -347,6 +370,13 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
           <p className="text-gray-700">
             Are you sure you want to delete <strong>{productToDelete?.name}</strong>? Customers will no longer be able to order it. This cannot be undone.
           </p>
+          {(outstandingUnits ?? 0) > 0 && (
+            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+              This product still has <strong>{outstandingUnits} unit{outstandingUnits === 1 ? '' : 's'}</strong> in upcoming orders that
+              need preparation. Deleting it also deletes its recipe, so those units will no longer be
+              counted in Ingredient Planning — prepare or note them first.
+            </p>
+          )}
           <div className="flex gap-3 pt-2">
             <Button variant="outline" onClick={() => setProductToDelete(null)} className="flex-1 h-12">Cancel</Button>
             <Button variant="destructive" onClick={confirmDeleteProduct} className="flex-1 h-12">

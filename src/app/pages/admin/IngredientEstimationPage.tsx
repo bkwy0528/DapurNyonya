@@ -41,6 +41,7 @@ export default function IngredientEstimationPage({ user: _user }: IngredientEsti
   const [products, setProducts] = useState<any[]>([]);
   const [productCounts, setProductCounts] = useState<ProductCount[]>([]);
   const [ingredients, setIngredients] = useState<IngredientEstimate[]>([]);
+  const [deletedProductItems, setDeletedProductItems] = useState<{ name: string; count: number }[]>([]);
 
   useEffect(() => {
     if (!manualMode) calculateFromOrders();
@@ -51,7 +52,13 @@ export default function IngredientEstimationPage({ user: _user }: IngredientEsti
     setProducts(allProducts);
 
     const today = todayKey();
-    const counts: { [name: string]: number } = {};
+    // Match order line items to products by id, so renaming a product no longer
+    // orphans its outstanding orders' ingredient needs. Name is only a fallback
+    // for legacy orders whose items predate productId being stored.
+    const productById = new Map(allProducts.map((p: any) => [p.id, p]));
+    const productByName = new Map(allProducts.map((p: any) => [p.name, p]));
+    const counts: { [productId: string]: number } = {};
+    const unmatched: { [name: string]: number } = {};
     orders
       .filter((order: any) =>
         NEEDS_PREPARATION.includes(order.status)
@@ -60,17 +67,27 @@ export default function IngredientEstimationPage({ user: _user }: IngredientEsti
       )
       .forEach((order: any) => {
         (order.items || []).forEach((item: any) => {
-          counts[item.name] = (counts[item.name] || 0) + (item.quantity || 0);
+          const product = productById.get(item.productId) || productByName.get(item.name);
+          if (product) {
+            counts[product.id] = (counts[product.id] || 0) + (item.quantity || 0);
+          } else {
+            // The product was deleted after this order was placed — its recipe is
+            // gone, so it can't be counted. Surfaced as a warning instead of
+            // silently vanishing from the shopping list.
+            const label = item.name || 'Unknown product';
+            unmatched[label] = (unmatched[label] || 0) + (item.quantity || 0);
+          }
         });
       });
 
     const newCounts: ProductCount[] = allProducts.map((p: any) => ({
       id: p.id,
       name: p.name,
-      count: counts[p.name] || 0,
+      count: counts[p.id] || 0,
       hasRecipe: Array.isArray(p.ingredients) && p.ingredients.length > 0,
     }));
     setProductCounts(newCounts);
+    setDeletedProductItems(Object.entries(unmatched).map(([name, count]) => ({ name, count })));
     calculateIngredients(allProducts, newCounts);
   };
 
@@ -179,6 +196,19 @@ export default function IngredientEstimationPage({ user: _user }: IngredientEsti
             )}
           </CardContent>
         </Card>
+
+        {!manualMode && deletedProductItems.length > 0 && (
+          <div className="warning-box">
+            <div className="flex items-start space-x-3">
+              <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-1" />
+              <p className="text-sm text-yellow-800">
+                <strong>{deletedProductItems.map(d => `${d.name} (${d.count} units)`).join(', ')}</strong> {deletedProductItems.length === 1 ? 'appears' : 'appear'} in
+                upcoming orders, but the {deletedProductItems.length === 1 ? 'product has' : 'products have'} been deleted — the recipe is gone,
+                so those ingredients are not included below.
+              </p>
+            </div>
+          </div>
+        )}
 
         {productsWithoutRecipe.length > 0 && (
           <div className="warning-box">
