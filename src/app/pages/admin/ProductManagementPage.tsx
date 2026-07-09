@@ -13,6 +13,8 @@ import { toast } from 'sonner';
 import { User } from '../../App';
 import { getOrders, getProducts, saveProduct, deleteProduct } from '../../utils/db';
 import { compressImage } from '../../utils/image';
+import { onImageError } from '../../utils/imageFallback';
+import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
 interface ProductManagementPageProps {
   user: User;
@@ -38,6 +40,7 @@ interface Product {
 
 export default function ProductManagementPage({ user: _user }: ProductManagementPageProps) {
   const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
@@ -79,7 +82,7 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
   const [ingredients, setIngredients] = useState<ProductIngredient[]>([]);
 
   useEffect(() => {
-    getProducts().then(setProducts);
+    getProducts().then(setProducts).finally(() => setLoading(false));
   }, []);
 
   // Photos are resized/compressed before storing — Firestore documents cap at
@@ -187,6 +190,10 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
     setEditingProduct(null);
     setDuplicateNameWarning(false);
   };
+
+  if (loading) {
+    return <LoadingSpinner />;
+  }
 
   return (
     <div className="min-h-screen pb-24">
@@ -317,7 +324,7 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
                 <div className="flex flex-col md:flex-row gap-6">
                   <div className="w-full md:w-48 h-48 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
                     {product.image ? (
-                      <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
+                      <img src={product.image} alt={product.name} onError={onImageError} className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-gray-400">No Image</div>
                     )}

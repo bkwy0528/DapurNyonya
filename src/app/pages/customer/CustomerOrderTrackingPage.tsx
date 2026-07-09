@@ -8,6 +8,8 @@ import { ArrowLeft, Package, Clock, Truck, AlertCircle, Receipt, Home as HomeIco
 import { User } from '../../App';
 import { getOrdersByCustomer, updateOrderFieldsReleasingSlot } from '../../utils/db';
 import { getStatusStyle } from '../../utils/statusStyles';
+import { onImageError } from '../../utils/imageFallback';
+import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { Button } from '../../components/ui/button';
 import { toast } from 'sonner';
 
@@ -33,13 +35,16 @@ const getStatusSteps = (deliveryMethod: string) =>
 
 export default function CustomerOrderTrackingPage({ user }: CustomerOrderTrackingPageProps) {
   const [orders, setOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [orderToCancel, setOrderToCancel] = useState<any>(null);
   const [cancelling, setCancelling] = useState(false);
 
   const loadOrders = () => {
-    getOrdersByCustomer(user.id).then(userOrders => {
-      setOrders([...userOrders].sort((a, b) => new Date(b.orderDate || 0).getTime() - new Date(a.orderDate || 0).getTime()));
-    });
+    getOrdersByCustomer(user.id)
+      .then(userOrders => {
+        setOrders([...userOrders].sort((a, b) => new Date(b.orderDate || 0).getTime() - new Date(a.orderDate || 0).getTime()));
+      })
+      .finally(() => setLoading(false));
   };
 
   useEffect(() => { loadOrders(); }, [user.id]);
@@ -77,6 +82,10 @@ export default function CustomerOrderTrackingPage({ user }: CustomerOrderTrackin
   };
 
   const getOrderLabel = (order: any) => order.finalizedNumber || `Order #${order.id.slice(-6)}`;
+
+  if (loading) {
+    return <LoadingSpinner />;
+  }
 
   return (
     <div className="min-h-screen pb-24">
@@ -122,7 +131,7 @@ export default function CustomerOrderTrackingPage({ user }: CustomerOrderTrackin
                     <div className="space-y-4">
                       {order.items && order.items.map((item: any, idx: number) => (
                         <div key={idx} className="flex items-start space-x-4">
-                          {item.image && <img src={item.image} alt={item.name} className="w-20 h-20 rounded-lg object-cover" />}
+                          {item.image && <img src={item.image} alt={item.name} onError={onImageError} className="w-20 h-20 rounded-lg object-cover" />}
                           <div className="flex-1">
                             <h3 className="font-semibold text-gray-900">{item.name}</h3>
                             <p className="text-sm text-gray-600 mt-1">Quantity: {item.quantity}</p>

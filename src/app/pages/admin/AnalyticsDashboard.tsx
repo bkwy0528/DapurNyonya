@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { ArrowLeft, TrendingUp, DollarSign, ShoppingBag, Users, Calendar } from 'lucide-react';
 import { User } from '../../App';
 import { getOrders } from '../../utils/db';
+import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -39,9 +40,10 @@ export default function AnalyticsDashboard({ user: _user }: AnalyticsDashboardPr
     recentRevenue: 0,
     growthRate: 0,
   });
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    calculateAnalytics();
+    calculateAnalytics().finally(() => setLoading(false));
   }, []);
 
   const calculateAnalytics = async () => {
@@ -111,6 +113,10 @@ export default function AnalyticsDashboard({ user: _user }: AnalyticsDashboardPr
 
     setAnalytics({ totalRevenue, totalOrders, pendingOrders, completedOrders, monthlyRevenue, productSales, statusBreakdown, recentRevenue, growthRate });
   };
+
+  if (loading) {
+    return <LoadingSpinner />;
+  }
 
   return (
     <div className="min-h-screen pb-24">

@@ -7,6 +7,7 @@ import { ArrowLeft, ShoppingCart } from 'lucide-react';
 import { User } from '../../App';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { getProducts } from '../../utils/db';
+import { onImageError } from '../../utils/imageFallback';
 
 interface ProductDetailPageProps {
   user: User;
@@ -54,7 +55,7 @@ export default function ProductDetailPage({ user: _user }: ProductDetailPageProp
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-6">
         <Card className="overflow-hidden">
           <div className="aspect-video w-full overflow-hidden bg-gray-100">
-            <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
+            <img src={product.image} alt={product.name} onError={onImageError} className="w-full h-full object-cover" />
           </div>
 
           <CardContent className="p-6 space-y-6">

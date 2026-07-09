@@ -14,6 +14,8 @@ import { User } from '../../App';
 import { generateFinalOrderNumber, getDateKey } from '../../utils/business';
 import { getOrders, updateOrderFields, updateOrderFieldsReleasingSlot, getNextDailyOrderSequence } from '../../utils/db';
 import { getStatusStyle } from '../../utils/statusStyles';
+import { onImageError } from '../../utils/imageFallback';
+import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
 interface OrderManagementPageProps {
   user: User;
@@ -21,6 +23,7 @@ interface OrderManagementPageProps {
 
 export default function OrderManagementPage({ user: _user }: OrderManagementPageProps) {
   const [orders, setOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
@@ -34,9 +37,15 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
   useEffect(() => { loadOrders(); }, []);
 
   const loadOrders = async () => {
-    const all = await getOrders();
-    const reversed = [...all].sort((a, b) => new Date(b.orderDate || 0).getTime() - new Date(a.orderDate || 0).getTime());
-    setOrders(reversed);
+    try {
+      const all = await getOrders();
+      const reversed = [...all].sort((a, b) => new Date(b.orderDate || 0).getTime() - new Date(a.orderDate || 0).getTime());
+      setOrders(reversed);
+    } finally {
+      // Only the first load shows the page spinner — refreshes after a status
+      // update keep the current list on screen.
+      setLoading(false);
+    }
   };
 
   const filteredOrders = useMemo(() => {
@@ -96,6 +105,10 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
 
 
   const getOrderLabel = (order: any) => order.finalizedNumber || `Order #${order.id.slice(-6)}`;
+
+  if (loading) {
+    return <LoadingSpinner />;
+  }
 
   return (
     <div className="min-h-screen pb-24">
@@ -178,7 +191,7 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
                   <h4 className="font-semibold text-gray-900">Order Items:</h4>
                   {order.items && order.items.map((item: any, idx: number) => (
                     <div key={idx} className="flex items-start space-x-4 detail-box">
-                      {item.image && <img src={item.image} alt={item.name} className="w-20 h-20 rounded-lg object-cover flex-shrink-0" />}
+                      {item.image && <img src={item.image} alt={item.name} onError={onImageError} className="w-20 h-20 rounded-lg object-cover flex-shrink-0" />}
                       <div className="flex-1">
                         <h5 className="font-semibold text-gray-900">{item.name}</h5>
                         <p className="text-sm text-gray-600 mt-1">Quantity: {item.quantity}</p>

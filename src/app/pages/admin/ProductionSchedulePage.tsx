@@ -9,6 +9,7 @@ import { User } from '../../App';
 import { getStatusStyle } from '../../utils/statusStyles';
 import { Calendar } from '../../components/ui/calendar';
 import { getOrders, getDailyLimits, saveDailyLimit, clearDailyLimit } from '../../utils/db';
+import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
 interface ProductionSchedulePageProps {
   user: User;
@@ -20,6 +21,7 @@ interface GroupedOrders {
 
 export default function ProductionSchedulePage({ user: _user }: ProductionSchedulePageProps) {
   const [groupedOrders, setGroupedOrders] = useState<GroupedOrders>({});
+  const [loading, setLoading] = useState(true);
   const [dailyLimits, setDailyLimits] = useState<Record<string, number>>({});
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
     const today = new Date();
@@ -64,6 +66,14 @@ export default function ProductionSchedulePage({ user: _user }: ProductionSchedu
   };
 
   const loadData = async () => {
+    try {
+      await loadDataInner();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadDataInner = async () => {
     const [orders, limits] = await Promise.all([getOrders(), getDailyLimits()]);
     const grouped: GroupedOrders = {};
     orders
@@ -119,6 +129,10 @@ export default function ProductionSchedulePage({ user: _user }: ProductionSchedu
       return limit > 0 && getOrderCountForDate(dateKey) >= limit;
     })
     .map(fromDateKey);
+
+  if (loading) {
+    return <LoadingSpinner />;
+  }
 
   return (
     <div className="min-h-screen pb-24">

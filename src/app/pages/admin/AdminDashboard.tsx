@@ -7,6 +7,7 @@ import { ShoppingCart, Calendar, User, TrendingUp, Clock } from 'lucide-react';
 import { User as UserType } from '../../App';
 import { getOrders, getAdminProfile } from '../../utils/db';
 import { getStatusStyle } from '../../utils/statusStyles';
+import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
 interface AdminDashboardProps {
   user: UserType;
@@ -20,6 +21,7 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
     totalRevenue: 0,
   });
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [adminProfilePicture, setAdminProfilePicture] = useState<string>('');
 
   useEffect(() => {
@@ -60,7 +62,7 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
       const profile = await getAdminProfile();
       if (profile?.profilePicture) setAdminProfilePicture(profile.profilePicture);
     };
-    load();
+    load().finally(() => setLoading(false));
   }, []);
 
   const statCards = [
@@ -69,6 +71,10 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
     { title: 'Upcoming (7 days)', value: stats.upcomingProduction, icon: Calendar, bgColor: 'bg-orange-50', textColor: 'text-orange-600' },
     { title: 'Total Revenue', value: `RM ${stats.totalRevenue.toFixed(2)}`, icon: TrendingUp, bgColor: 'bg-green-50', textColor: 'text-green-600' },
   ];
+
+  if (loading) {
+    return <LoadingSpinner />;
+  }
 
   return (
     <div className="min-h-screen pb-24">

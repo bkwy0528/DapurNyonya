@@ -24,7 +24,10 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt' + no skipWaiting: a new version waits until the customer
+      // accepts the update toast (see main.tsx onNeedRefresh) instead of
+      // silently swapping the app mid-session.
+      registerType: 'prompt',
       manifestFilename: 'manifest.json',
       includeAssets: ['apple-touch-icon.png'],
       manifest: {
@@ -58,8 +61,6 @@ export default defineConfig({
       },
       workbox: {
         cleanupOutdatedCaches: true,
-        clientsClaim: true,
-        skipWaiting: true,
         globPatterns: ['**/*.{html,js,css,png,svg,ico,webp,jpg,jpeg,woff,woff2}'],
         runtimeCaching: [
           {

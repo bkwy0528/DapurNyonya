@@ -6,6 +6,8 @@ import { Badge } from '../../components/ui/badge';
 import { User as UserIconLucide, Package } from 'lucide-react';
 import { User as UserType } from '../../App';
 import { getProducts, getSettings } from '../../utils/db';
+import { onImageError } from '../../utils/imageFallback';
+import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
 interface CustomerHomePageProps {
   user: UserType;
@@ -13,6 +15,7 @@ interface CustomerHomePageProps {
 
 export default function CustomerHomePage({ user }: CustomerHomePageProps) {
   const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [announcement, setAnnouncement] = useState({
     enabled: true,
     title: 'Festive Season Orders Open!',
@@ -20,7 +23,9 @@ export default function CustomerHomePage({ user }: CustomerHomePageProps) {
   });
 
   useEffect(() => {
-    getProducts().then(all => setProducts(all.filter((p: any) => p.available)));
+    getProducts()
+      .then(all => setProducts(all.filter((p: any) => p.available)))
+      .finally(() => setLoading(false));
     getSettings().then(s => {
       if (!s) return;
       setAnnouncement({
@@ -30,6 +35,10 @@ export default function CustomerHomePage({ user }: CustomerHomePageProps) {
       });
     });
   }, []);
+
+  if (loading) {
+    return <LoadingSpinner />;
+  }
 
   return (
     <div className="min-h-screen pb-24">
@@ -82,7 +91,7 @@ export default function CustomerHomePage({ user }: CustomerHomePageProps) {
             <Card key={product.id} className="overflow-hidden hover:shadow-lg transition-shadow">
               <div className="flex flex-col sm:flex-row">
                 <div className="sm:w-48 h-48 sm:h-auto overflow-hidden flex-shrink-0">
-                  <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
+                  <img src={product.image} alt={product.name} onError={onImageError} className="w-full h-full object-cover" />
                 </div>
                 <div className="flex-1 p-6">
                   <div className="flex items-start justify-between mb-3">

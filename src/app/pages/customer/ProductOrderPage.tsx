@@ -12,6 +12,7 @@ import PageContainer from '../../components/ui/PageContainer';
 import FormSection from '../../components/ui/FormSection';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { getProducts } from '../../utils/db';
+import { onImageError } from '../../utils/imageFallback';
 
 interface ProductOrderPageProps {
   user: User;
@@ -75,7 +76,7 @@ export default function ProductOrderPage({ user: _user }: ProductOrderPageProps)
       <div className="px-0 py-8 space-y-6">
         <Card className="overflow-hidden">
           <div className="aspect-video w-full overflow-hidden">
-            <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
+            <img src={product.image} alt={product.name} onError={onImageError} className="w-full h-full object-cover" />
           </div>
           <CardContent className="p-6">
             <h2 className="text-2xl font-semibold text-gray-900 mb-2">{product.name}</h2>

@@ -8,6 +8,7 @@ import { Checkbox } from '../../components/ui/checkbox';
 import { ArrowLeft, Package, Calculator, AlertCircle } from 'lucide-react';
 import { User } from '../../App';
 import { getOrders, getProducts } from '../../utils/db';
+import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
 interface IngredientEstimationPageProps {
   user: User;
@@ -42,12 +43,21 @@ export default function IngredientEstimationPage({ user: _user }: IngredientEsti
   const [productCounts, setProductCounts] = useState<ProductCount[]>([]);
   const [ingredients, setIngredients] = useState<IngredientEstimate[]>([]);
   const [deletedProductItems, setDeletedProductItems] = useState<{ name: string; count: number }[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!manualMode) calculateFromOrders();
   }, [manualMode]);
 
   const calculateFromOrders = async () => {
+    try {
+      await calculateFromOrdersInner();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const calculateFromOrdersInner = async () => {
     const [allProducts, orders] = await Promise.all([getProducts(), getOrders()]);
     setProducts(allProducts);
 
@@ -125,6 +135,10 @@ export default function IngredientEstimationPage({ user: _user }: IngredientEsti
   };
 
   const productsWithoutRecipe = productCounts.filter(p => p.count > 0 && !p.hasRecipe);
+
+  if (loading) {
+    return <LoadingSpinner />;
+  }
 
   return (
     <div className="min-h-screen pb-24">
