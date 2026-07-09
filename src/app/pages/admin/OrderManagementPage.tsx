@@ -212,13 +212,13 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
                   <div className="detail-box">
                     <p className="text-sm text-gray-600 mb-1">Payment Method:</p>
                     <p className="font-semibold text-gray-900">
-                      {({'cash':'Cash',"tng":"Touch 'n Go eWallet (Online)",'fpx':'FPX Online Banking','duitnow':'DuitNow QR','debit':'Bank Transfer','card':'Credit/Debit Card','ewallet':'eWallet'} as Record<string,string>)[order.paymentMethod] || order.paymentMethod || '—'}
+                      {({'cash':'Cash','tng':'DuitNow QR / E-Wallet (Online)','fpx':'FPX Online Banking','duitnow':'DuitNow QR','debit':'Bank Transfer','card':'Credit/Debit Card','ewallet':'eWallet'} as Record<string,string>)[order.paymentMethod] || order.paymentMethod || '—'}
                     </p>
                   </div>
-                  {order.transferReference ? (
+                  {(order.transactionId || order.paymentIntentId) ? (
                     <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
                       <p className="text-sm text-gray-600 mb-1">Transaction Reference:</p>
-                      <p className="font-semibold font-mono text-orange-800">{order.transferReference}</p>
+                      <p className="font-semibold font-mono text-orange-800">{order.transactionId || order.paymentIntentId}</p>
                     </div>
                   ) : (
                     <div className="detail-box">

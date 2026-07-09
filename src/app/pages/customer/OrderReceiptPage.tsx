@@ -13,7 +13,7 @@ interface OrderReceiptPageProps {
 
 const PAYMENT_LABELS: Record<string, string> = {
   cash: 'Cash on Pickup / Delivery',
-  tng: "Touch 'n Go eWallet (Online)",
+  tng: 'DuitNow QR / E-Wallet (Online)',
   fpx: 'FPX Online Banking',
   // Historical labels — no longer selectable at checkout, kept for orders placed before the ToyyibPay migration
   debit: 'Bank Transfer / DuitNow',
