@@ -28,7 +28,9 @@ export default function ForgotPasswordPage() {
       setSent(true);
     } catch (err: any) {
       if (err.code === 'auth/user-not-found') {
-        toast.error('No account found with that email');
+        // Deliberately indistinguishable from a real send — confirming that an
+        // email is (or isn't) registered would let anyone probe for accounts.
+        setSent(true);
       } else {
         toast.error('Failed to send reset email. Please try again.');
       }
@@ -58,7 +60,7 @@ export default function ForgotPasswordPage() {
               </div>
               <div className="space-y-2">
                 <p className="text-gray-700">
-                  A reset link has been sent to <strong>{email}</strong>.
+                  If an account exists for <strong>{email}</strong>, a reset link has been sent to it.
                 </p>
                 <p className="text-sm text-gray-500">Check your inbox (and spam folder) and follow the instructions.</p>
               </div>

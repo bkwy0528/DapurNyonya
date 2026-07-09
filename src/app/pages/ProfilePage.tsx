@@ -43,6 +43,12 @@ export default function ProfilePage({ user, onLogout, onProfileUpdate }: Profile
   };
 
   const handleSave = async () => {
+    // Same required-field check Register applies — without it the profile could
+    // be saved with a blank name/phone (rules only check ownership, not content).
+    if (!name.trim() || !phone.trim()) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
     const fullPhone = `${countryCode}${phone}`;
     const updatedUser = { ...user, name, phone: fullPhone, email, address, notes, profilePicture };
     await saveUserProfile(user.id, { name, phone: fullPhone, email, address, notes, profilePicture });
