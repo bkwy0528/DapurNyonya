@@ -31,7 +31,10 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
         new Date(o.orderDate || o.createdAt || Date.now()).toDateString() === today
       );
       const pending = orders.filter((o: any) => o.status === 'Pending Approval');
+      // Rejected/Cancelled orders need no production — excluded the same way
+      // Production Schedule already excludes them, so the two counts agree.
       const upcoming = orders.filter((o: any) => {
+        if (o.status === 'Rejected' || o.status === 'Cancelled') return false;
         if (!o.deliveryDate) return false;
         const daysUntil = Math.ceil((new Date(o.deliveryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
         return daysUntil <= 7 && daysUntil >= 0;

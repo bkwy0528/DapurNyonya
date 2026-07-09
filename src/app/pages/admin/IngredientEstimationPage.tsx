@@ -81,8 +81,10 @@ export default function IngredientEstimationPage({ user: _user }: IngredientEsti
       if (count <= 0) return;
       const product = allProducts.find((p: any) => p.id === id);
       (product?.ingredients || []).forEach((ing: any) => {
-        const key = `${ing.name.toLowerCase()}|${ing.unit}`;
-        if (!aggregated[key]) aggregated[key] = { name: ing.name, quantity: 0, unit: ing.unit, checked: false };
+        // Trim + lowercase both parts so "Flour "/"flour" and "g"/"G" across two
+        // products' recipes combine into one row instead of splitting the total.
+        const key = `${ing.name.trim().toLowerCase()}|${(ing.unit || '').trim().toLowerCase()}`;
+        if (!aggregated[key]) aggregated[key] = { name: ing.name.trim(), quantity: 0, unit: (ing.unit || '').trim(), checked: false };
         aggregated[key].quantity += ing.quantity * count;
       });
     });

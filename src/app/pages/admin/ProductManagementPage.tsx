@@ -42,6 +42,7 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [imagePreview, setImagePreview] = useState<string>('');
+  const [duplicateNameWarning, setDuplicateNameWarning] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -95,6 +96,17 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
       toast.error('Preparation days must be at least 1');
       return;
     }
+
+    // Analytics and the Ingredient Planner both aggregate by product name, so two
+    // products sharing a name silently merge their reporting — warn once and let
+    // the admin decide (a second press saves anyway).
+    const trimmedName = formData.name.trim().toLowerCase();
+    const nameTaken = products.some(p => p.name.trim().toLowerCase() === trimmedName && p.id !== editingProduct?.id);
+    if (nameTaken && !duplicateNameWarning) {
+      setDuplicateNameWarning(true);
+      return;
+    }
+    setDuplicateNameWarning(false);
 
     // Only keep completed ingredient rows
     const cleanIngredients = ingredients.filter(ing => ing.name.trim() && ing.quantity > 0);
@@ -150,6 +162,7 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
     setIngredients([]);
     setImagePreview('');
     setEditingProduct(null);
+    setDuplicateNameWarning(false);
   };
 
   return (
@@ -179,7 +192,7 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Product Name *</Label>
-                <Input id="name" value={formData.name} onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))} placeholder="e.g., Traditional Dumplings" className="h-12" />
+                <Input id="name" value={formData.name} onChange={(e) => { setFormData(prev => ({ ...prev, name: e.target.value })); setDuplicateNameWarning(false); }} placeholder="e.g., Traditional Dumplings" className="h-12" />
               </div>
 
               <div className="space-y-2">
@@ -261,8 +274,14 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
                 <Switch id="available" checked={formData.available} onCheckedChange={(checked) => setFormData(prev => ({ ...prev, available: checked }))} />
               </div>
 
+              {duplicateNameWarning && (
+                <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  A product with this name already exists — sales analytics and ingredient
+                  planning will combine the two. Press the button again to save anyway.
+                </p>
+              )}
               <Button onClick={handleSaveProduct} size="lg" className="w-full h-12 brand-button">
-                {editingProduct ? 'Update Product' : 'Add Product'}
+                {duplicateNameWarning ? 'Save Anyway' : editingProduct ? 'Update Product' : 'Add Product'}
               </Button>
             </div>
           </DialogContent>

@@ -29,6 +29,7 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [orderToReject, setOrderToReject] = useState<any>(null);
+  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
 
   useEffect(() => { loadOrders(); }, []);
 
@@ -53,17 +54,26 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
   }, [orders, statusFilter, searchTerm]);
 
   const updateStatus = async (orderId: string, newStatus: string) => {
-    const updates: Record<string, any> = { status: newStatus };
-    if (newStatus === 'Order Received') {
-      const order = orders.find(o => o.id === orderId);
-      if (order && !order.finalizedNumber) {
-        const sequence = await getNextDailyOrderSequence(getDateKey());
-        updates.finalizedNumber = generateFinalOrderNumber(sequence);
+    // The finalizedNumber "already assigned" check below reads stale client
+    // state, so a rapid double-click on Approve could burn an extra daily
+    // sequence number — block re-entry while an update is in flight.
+    if (updatingOrderId) return;
+    setUpdatingOrderId(orderId);
+    try {
+      const updates: Record<string, any> = { status: newStatus };
+      if (newStatus === 'Order Received') {
+        const order = orders.find(o => o.id === orderId);
+        if (order && !order.finalizedNumber) {
+          const sequence = await getNextDailyOrderSequence(getDateKey());
+          updates.finalizedNumber = generateFinalOrderNumber(sequence);
+        }
       }
+      await updateOrderFields(orderId, updates);
+      await loadOrders();
+      toast.success('Order status updated!');
+    } finally {
+      setUpdatingOrderId(null);
     }
-    await updateOrderFields(orderId, updates);
-    await loadOrders();
-    toast.success('Order status updated!');
   };
 
   const saveAdminNotes = async (orderId: string) => {
@@ -256,8 +266,8 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
                     <div className="flex flex-wrap gap-2">
                       {order.status === 'Pending Approval' && (
                         <>
-                          <Button onClick={() => updateStatus(order.id, 'Order Received')} className="success-button">
-                            <Check className="w-4 h-4 mr-2" />Approve Order
+                          <Button onClick={() => updateStatus(order.id, 'Order Received')} disabled={updatingOrderId === order.id} className="success-button">
+                            <Check className="w-4 h-4 mr-2" />{updatingOrderId === order.id ? 'Approving…' : 'Approve Order'}
                           </Button>
                           <Button variant="destructive" onClick={() => { setOrderToReject(order); setRejectDialogOpen(true); }}>
                             <X className="w-4 h-4 mr-2" />Reject Order
