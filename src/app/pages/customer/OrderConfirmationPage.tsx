@@ -42,9 +42,14 @@ function CashConfirmView({ pending }: { pending: any }) {
       clearCart();
       setSubmitted(true);
       setTimeout(() => navigate('/customer/tracking'), 3000);
-    } catch {
+    } catch (err: any) {
       setSubmitting(false);
-      toast.error('Could not submit your order. Please try again.');
+      // failed-precondition messages are written for the customer (date fully
+      // booked, product no longer available) — show them instead of a generic error.
+      const message = err?.code === 'functions/failed-precondition' && err?.message
+        ? err.message
+        : 'Could not submit your order. Please try again.';
+      toast.error(message);
     }
   };
 

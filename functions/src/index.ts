@@ -325,6 +325,28 @@ export const submitOrder = onCall(
 
     const orderId = await db.runTransaction(async (tx) => {
       const newOrderRef = db.collection('orders').doc();
+
+      // Capacity is re-checked inside the same transaction that increments the
+      // count, so two orders racing for the last slot can no longer both slip
+      // through (the checkout-time pre-check is only advisory). A paid online
+      // order is never refused here — the money is already captured by this
+      // point and checkout pre-checked capacity before payment started — so it
+      // is created regardless and the (rare) overbooking is logged for the
+      // admin to resolve.
+      const countRef = db.collection('orderCounts').doc(data.deliveryDate);
+      const limitSnap = await tx.get(db.collection('dailyLimits').doc(data.deliveryDate));
+      const countSnap = await tx.get(countRef);
+      const limit = limitSnap.exists ? Number((limitSnap.data() as any).limit) || 0 : 0;
+      const booked = countSnap.exists ? Math.max(0, Number((countSnap.data() as any).count) || 0) : 0;
+      if (limit > 0 && booked >= limit) {
+        if (paymentStatus !== 'paid') {
+          throw new HttpsError('failed-precondition', 'The selected date is fully booked. Please choose another date.');
+        }
+        logger.warn('Paid order accepted over the daily capacity limit', {
+          deliveryDate: data.deliveryDate, limit, booked,
+        });
+      }
+
       let finalizedNumber: string | null = null;
 
       if (status === 'Order Received') {
@@ -362,7 +384,7 @@ export const submitOrder = onCall(
         clientRequestId,
       });
 
-      tx.set(db.collection('orderCounts').doc(data.deliveryDate), { count: FieldValue.increment(1) }, { merge: true });
+      tx.set(countRef, { count: FieldValue.increment(1) }, { merge: true });
 
       return newOrderRef.id;
     });

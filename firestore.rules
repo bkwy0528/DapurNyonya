@@ -45,11 +45,19 @@ service cloud.firestore {
     }
 
     // Per-date order counters: public read so customers can check remaining
-    // capacity at checkout; any signed-in user can write because the counter is
-    // maintained client-side alongside order creation/cancellation.
+    // capacity at checkout. Increments happen only server-side in submitOrder
+    // (Admin SDK, bypasses these rules). The only client write allowed is
+    // releasing a booked slot — the count decremented by exactly 1 — which is
+    // what customer self-cancel does; anything else (arbitrary overwrites that
+    // could corrupt capacity checks for other customers) is rejected.
     match /orderCounts/{dateKey} {
       allow read: if true;
-      allow write: if isSignedIn();
+      allow write: if isAdmin() || (
+        isSignedIn()
+        && request.resource.data.keys().hasOnly(['count'])
+        && request.resource.data.count is int
+        && request.resource.data.count == (resource == null ? -1 : resource.data.count - 1)
+      );
     }
 
     // Settings: anyone can read (business hours / delivery info shown to customers), only admin writes
@@ -75,11 +83,11 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
-    // Daily order-number counters: any signed-in user can increment (customers assign
-    // their own finalized number right after a successful online payment; admins do
-    // the same when approving a cash order) — the counter itself holds no sensitive data.
+    // Daily order-number counters: online orders get their finalized number
+    // assigned server-side in submitOrder now, so the only client writer left
+    // is the admin approving a cash order — locked back down to admin.
     match /counters/{counterId} {
-      allow read, write: if isSignedIn();
+      allow read, write: if isAdmin();
     }
   }
 }

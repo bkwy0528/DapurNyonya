@@ -207,8 +207,24 @@ describe('orderCounts', () => {
     await assertFails(setDoc(doc(anon(), 'orderCounts/2026-07-09'), { count: 1 }));
   });
 
-  it('lets any signed-in customer write a capacity count', async () => {
-    await assertSucceeds(setDoc(doc(customer('cust-1'), 'orderCounts/2026-07-09'), { count: 1 }));
+  // Increments happen only server-side in submitOrder (Admin SDK); the sole
+  // client write allowed is releasing a booked slot — count decremented by
+  // exactly 1 — which is what customer self-cancel performs.
+  it('lets a signed-in customer release a slot (decrement the count by exactly 1)', async () => {
+    await seed('orderCounts/2026-07-09', { count: 3 });
+    await assertSucceeds(setDoc(doc(customer('cust-1'), 'orderCounts/2026-07-09'), { count: 2 }));
+  });
+
+  it('blocks a signed-in customer from any other capacity write (increment, jump, or arbitrary overwrite)', async () => {
+    await seed('orderCounts/2026-07-09', { count: 3 });
+    await assertFails(setDoc(doc(customer('cust-1'), 'orderCounts/2026-07-09'), { count: 4 })); // increment
+    await assertFails(setDoc(doc(customer('cust-1'), 'orderCounts/2026-07-09'), { count: 1 })); // double decrement
+    await assertFails(setDoc(doc(customer('cust-1'), 'orderCounts/2026-07-09'), { count: 999 })); // overwrite
+  });
+
+  it('lets the admin write any capacity count', async () => {
+    await seed('orderCounts/2026-07-09', { count: 3 });
+    await assertSucceeds(setDoc(doc(admin(), 'orderCounts/2026-07-09'), { count: 0 }));
   });
 });
 
@@ -266,9 +282,18 @@ describe('settings and dailyLimits', () => {
 });
 
 describe('counters', () => {
-  it('lets any signed-in user read and write the daily order-number counter', async () => {
-    await assertSucceeds(setDoc(doc(customer('cust-1'), 'counters/orders-260709'), { count: 1 }));
-    await assertSucceeds(getDoc(doc(customer('cust-1'), 'counters/orders-260709')));
+  // Online orders get their finalized number assigned server-side in
+  // submitOrder now, so the only client writer left is the admin approving a
+  // cash order — customers no longer need (or get) any access.
+  it('blocks a signed-in customer from reading or writing the daily order-number counter', async () => {
+    await seed('counters/orders-260709', { count: 1 });
+    await assertFails(getDoc(doc(customer('cust-1'), 'counters/orders-260709')));
+    await assertFails(setDoc(doc(customer('cust-1'), 'counters/orders-260709'), { count: 2 }));
+  });
+
+  it('lets the admin read and write the counter', async () => {
+    await assertSucceeds(setDoc(doc(admin(), 'counters/orders-260709'), { count: 1 }));
+    await assertSucceeds(getDoc(doc(admin(), 'counters/orders-260709')));
   });
 
   it('blocks an unauthenticated visitor from writing the counter', async () => {
