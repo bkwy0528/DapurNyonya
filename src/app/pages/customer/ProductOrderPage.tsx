@@ -22,6 +22,7 @@ export default function ProductOrderPage({ user: _user }: ProductOrderPageProps)
   const { productId } = useParams();
   const { addToCart } = useCart();
   const [product, setProduct] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
   const [notes, setNotes] = useState('');
 
@@ -29,12 +30,26 @@ export default function ProductOrderPage({ user: _user }: ProductOrderPageProps)
     if (productId) {
       getProducts().then(products => {
         setProduct(products.find((p: any) => p.id === productId) || null);
+        setLoading(false);
       });
+    } else {
+      setLoading(false);
     }
   }, [productId]);
 
-  if (!product) {
+  if (loading) {
     return <LoadingSpinner />;
+  }
+
+  if (!product) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-2xl font-semibold text-gray-900 mb-4">Product not found</h2>
+          <Link to="/customer/home"><Button>Back to Home</Button></Link>
+        </div>
+      </div>
+    );
   }
 
   const handleQuantityChange = (delta: number) => setQuantity(Math.max(1, quantity + delta));

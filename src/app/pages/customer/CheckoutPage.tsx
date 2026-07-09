@@ -145,7 +145,16 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
     }
     if (deliveryMethod === 'delivery' && !deliveryAddress) errors.push('Please fill in your delivery address');
     if (deliveryMethod === 'delivery' && !postalCode) errors.push('Please fill in your postal code');
+    if (deliveryMethod === 'delivery' && postalCode && postalCode.length !== 5) errors.push('Postal code must be 5 digits');
     if (deliveryMethod === 'delivery' && feeStatus === 'calculating') errors.push('Please wait for the delivery fee to finish calculating');
+    // 'idle' means the fee was never calculated at all (blur never fired on the
+    // address fields) — without this check a delivery order could go through
+    // with a RM0 delivery charge. Kick the calculation off now and have the
+    // customer press the button again once it resolves.
+    if (deliveryMethod === 'delivery' && feeStatus === 'idle' && deliveryAddress.trim() && postalCode.length === 5) {
+      calculateDeliveryFee();
+      errors.push('Calculating your delivery fee — please press Place Order again in a moment');
+    }
     if (deliveryMethod === 'delivery' && feeStatus === 'out-of-range') errors.push(`Sorry, we don't deliver that far (over ${MAX_DELIVERY_KM}km away). Please choose Pickup or a closer address.`);
     if (!contactPhone) errors.push('Please provide a contact phone number');
     if (!paymentMethod) errors.push('Please select a payment method');
