@@ -38,7 +38,9 @@ export default function Header({ user, onLogout }: { user: any; onLogout?: () =>
         <div className="app-header__bar">
           <div className="flex items-center space-x-3">
             <Link to={homeLink} className="brand-link">
-              <div className="brand-mark">DN</div>
+              <div className="brand-mark">
+                <img src="/pwa/header-512.png" alt="DapurNyonya" className="rounded-md" />
+              </div>
               <span className="brand-name">DapurNyonya</span>
             </Link>
           </div>
