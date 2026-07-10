@@ -9,7 +9,7 @@ import { ArrowLeft, User as UserIcon, Mail, Phone, Lock, Eye, EyeOff, Check, X }
 import { toast } from 'sonner';
 import { createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { auth } from '../../firebase';
-import { ADMIN_EMAIL, saveUserProfile } from '../utils/db';
+import { ADMIN_EMAILS, saveUserProfile } from '../utils/db';
 import { validatePassword } from '../utils/business';
 import { User } from '../App';
 import PageContainer from '../components/ui/PageContainer';
@@ -78,7 +78,7 @@ export default function RegisterPage({ onRegisterSuccess }: RegisterPageProps) {
       // Derive the role the same way App.tsx's auth listener does — hardcoding
       // 'customer' here briefly routed an admin registration to customer pages
       // until the async listener corrected it.
-      const role = email === ADMIN_EMAIL ? ('admin' as const) : ('customer' as const);
+      const role = ADMIN_EMAILS.includes(email) ? ('admin' as const) : ('customer' as const);
       await saveUserProfile(uid, {
         id: uid,
         name,

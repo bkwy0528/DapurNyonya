@@ -5,7 +5,7 @@ import { CartProvider } from './context/CartContext';
 import Header from './components/ui/header';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from '../firebase';
-import { ADMIN_EMAIL, getAdminProfile, getUserProfile, saveUserProfile, getProducts, seedDefaultProducts } from './utils/db';
+import { ADMIN_EMAILS, getAdminProfile, getUserProfile, saveUserProfile, getProducts, seedDefaultProducts } from './utils/db';
 import InstallAppPrompt from './components/pwa/InstallAppPrompt';
 import LoadingSpinner from './components/ui/LoadingSpinner';
 
@@ -56,7 +56,7 @@ function App() {
       const thisCall = ++latestCall;
 
       if (firebaseUser) {
-        if (firebaseUser.email === ADMIN_EMAIL) {
+        if (firebaseUser.email && ADMIN_EMAILS.includes(firebaseUser.email)) {
           const profile = await getAdminProfile();
           if (thisCall !== latestCall) return;
           setUser({

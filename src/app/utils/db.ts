@@ -4,7 +4,7 @@ import {
   query, where, addDoc, runTransaction, writeBatch, increment,
 } from 'firebase/firestore';
 
-export const ADMIN_EMAIL = 'yikbryan0528work@gmail.com';
+export const ADMIN_EMAILS = ['yikbryan0528work@gmail.com', 'ksl_joyce@yahoo.com'];
 
 // ─── Products ────────────────────────────────────────────────────────────────
 
