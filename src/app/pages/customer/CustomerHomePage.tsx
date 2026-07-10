@@ -1,12 +1,10 @@
-import { useState, useEffect } from 'react';
 import { Link } from 'react-router';
-import { Button } from '../../components/ui/button';
-import { Card, CardContent } from '../../components/ui/card';
-import { Badge } from '../../components/ui/badge';
-import { User as UserIconLucide, Package } from 'lucide-react';
+import { User as UserIconLucide } from 'lucide-react';
 import { User as UserType } from '../../App';
-import { getProducts, getSettings } from '../../utils/db';
-import { onImageError } from '../../utils/imageFallback';
+import { useStorefront } from '../../hooks/useStorefront';
+import AnnouncementBanner from '../../components/AnnouncementBanner';
+import ProductCard from '../../components/ProductCard';
+import BusinessAboutCard from '../../components/BusinessAboutCard';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
 interface CustomerHomePageProps {
@@ -14,27 +12,7 @@ interface CustomerHomePageProps {
 }
 
 export default function CustomerHomePage({ user }: CustomerHomePageProps) {
-  const [products, setProducts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [announcement, setAnnouncement] = useState({
-    enabled: true,
-    title: 'Festive Season Orders Open!',
-    text: 'Place your orders now for the upcoming celebrations. Limited slots available!',
-  });
-
-  useEffect(() => {
-    getProducts()
-      .then(all => setProducts(all.filter((p: any) => p.available)))
-      .finally(() => setLoading(false));
-    getSettings().then(s => {
-      if (!s) return;
-      setAnnouncement({
-        enabled: s.announcementEnabled !== false,
-        title: s.announcementTitle || 'Festive Season Orders Open!',
-        text: s.announcementText || 'Place your orders now for the upcoming celebrations. Limited slots available!',
-      });
-    });
-  }, []);
+  const { products, loading, announcement, business } = useStorefront();
 
   if (loading) {
     return <LoadingSpinner />;
@@ -62,23 +40,7 @@ export default function CustomerHomePage({ user }: CustomerHomePageProps) {
         </div>
       </div>
 
-      {announcement.enabled && (
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 -mt-4">
-          <Card className="bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 shadow-lg">
-            <CardContent className="p-5">
-              <div className="flex items-start space-x-3">
-                <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Package className="w-5 h-5 text-white" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900 mb-1">{announcement.title}</h3>
-                  <p className="text-sm text-gray-700">{announcement.text}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <AnnouncementBanner announcement={announcement} className="max-w-4xl mx-auto px-4 sm:px-6 -mt-4" />
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
         <div className="mb-6">
@@ -88,37 +50,16 @@ export default function CustomerHomePage({ user }: CustomerHomePageProps) {
 
         <div className="grid gap-6">
           {products.map((product) => (
-            <Card key={product.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-              <div className="flex flex-col sm:flex-row">
-                <div className="sm:w-48 h-48 sm:h-auto overflow-hidden flex-shrink-0">
-                  <img src={product.image} alt={product.name} onError={onImageError} className="w-full h-full object-cover" />
-                </div>
-                <div className="flex-1 p-6">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h3 className="text-xl font-semibold text-gray-900 mb-2">{product.name}</h3>
-                      <p className="text-gray-600">{product.description}</p>
-                    </div>
-                    {product.available && (
-                      <Badge className="status-badge--available ml-3">Available</Badge>
-                    )}
-                  </div>
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mt-4 gap-3">
-                    <div className="text-2xl font-bold text-orange-600">RM {product.price.toFixed(2)}</div>
-                    <div className="flex flex-wrap gap-3 w-full sm:w-auto">
-                      <Link to={`/customer/product/${product.id}`} className="flex-1 sm:flex-none">
-                        <Button variant="outline" className="w-full sm:w-auto border-2">View Details</Button>
-                      </Link>
-                      <Link to={`/customer/order/${product.id}`} className="flex-1 sm:flex-none">
-                        <Button className="w-full sm:w-auto brand-button">Order This</Button>
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </Card>
+            <ProductCard
+              key={product.id}
+              product={product}
+              detailsTo={`/customer/product/${product.id}`}
+              orderTo={`/customer/order/${product.id}`}
+            />
           ))}
         </div>
+
+        <BusinessAboutCard business={business} />
       </div>
     </div>
   );

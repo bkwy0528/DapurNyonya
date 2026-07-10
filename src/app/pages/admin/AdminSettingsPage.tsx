@@ -20,6 +20,7 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
   const [businessDescription, setBusinessDescription] = useState('Homemade Dumplings & Snacks');
   const [contactPhone, setContactPhone] = useState('+60 12-345 6789');
   const [contactEmail, setContactEmail] = useState('dapurnyonya@email.com');
+  const [operatingHours, setOperatingHours] = useState('');
   const [announcementEnabled, setAnnouncementEnabled] = useState(true);
   const [announcementTitle, setAnnouncementTitle] = useState('Festive Season Orders Open!');
   const [announcementText, setAnnouncementText] = useState('Place your orders now for the upcoming celebrations. Limited slots available!');
@@ -31,6 +32,7 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
       if (s.businessDescription) setBusinessDescription(s.businessDescription);
       if (s.contactPhone) setContactPhone(s.contactPhone);
       if (s.contactEmail) setContactEmail(s.contactEmail);
+      if (s.operatingHours) setOperatingHours(s.operatingHours);
       if (s.announcementEnabled !== undefined) setAnnouncementEnabled(s.announcementEnabled);
       if (s.announcementTitle) setAnnouncementTitle(s.announcementTitle);
       if (s.announcementText) setAnnouncementText(s.announcementText);
@@ -44,6 +46,7 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
         businessDescription,
         contactPhone,
         contactEmail,
+        operatingHours,
         announcementEnabled,
         announcementTitle,
         announcementText,
@@ -93,6 +96,11 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
                 <Label htmlFor="contactEmail" className="text-base">Contact Email</Label>
                 <Input id="contactEmail" type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="your@email.com" className="h-12 text-base" />
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="operatingHours" className="text-base">Operating Hours</Label>
+              <Input id="operatingHours" value={operatingHours} onChange={(e) => setOperatingHours(e.target.value)} placeholder="e.g. Mon–Sat, 9:00am – 6:00pm" className="h-12 text-base" />
+              <p className="text-sm text-gray-600">Shown to customers in the About section on the home page. Leave empty to hide.</p>
             </div>
           </CardContent>
         </Card>
