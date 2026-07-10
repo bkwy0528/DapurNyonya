@@ -3,19 +3,20 @@ import { Link, useNavigate } from 'react-router';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
-import { ArrowLeft, Plus, Minus, Trash2, ShoppingCart } from 'lucide-react';
+import { ArrowLeft, Plus, Minus, Trash2, ShoppingCart, LogIn } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { User } from '../../App';
 import { toast } from 'sonner';
 
 interface CartPageProps {
-  user: User;
+  user: User | null;
 }
 
 export default function CartPage({ user }: CartPageProps) {
   const navigate = useNavigate();
   const { cartItems, updateQuantity, removeFromCart, getCartTotal } = useCart();
   const [itemToRemove, setItemToRemove] = useState<{ productId: string; name: string } | null>(null);
+  const homeLink = user ? '/customer/home' : '/';
 
   const confirmRemove = () => {
     if (itemToRemove) {
@@ -30,6 +31,12 @@ export default function CartPage({ user }: CartPageProps) {
       toast.error('Your cart is empty');
       return;
     }
+    if (!user) {
+      // Cart survives the login round-trip via CartContext's localStorage
+      // persistence, so this is a detour, not a reset.
+      navigate('/login', { state: { from: '/customer/cart' } });
+      return;
+    }
     navigate('/customer/checkout');
   };
 
@@ -39,7 +46,7 @@ export default function CartPage({ user }: CartPageProps) {
         {/* Header */}
         <div className="page-hero">
           <div className="page-hero__inner">
-            <Link to="/customer/home" className="page-back-link">
+            <Link to={homeLink} className="page-back-link">
               <ArrowLeft className="w-5 h-5 mr-2" />
               <span className="text-lg">Back to Home</span>
             </Link>
@@ -55,7 +62,7 @@ export default function CartPage({ user }: CartPageProps) {
             </div>
             <h2 className="text-2xl font-semibold text-gray-900 mb-3">Your cart is empty</h2>
             <p className="text-gray-600 mb-8">Add some delicious items to get started!</p>
-            <Link to="/customer/home">
+            <Link to={homeLink}>
               <Button className="brand-button">
                 Browse Products
               </Button>
@@ -71,7 +78,7 @@ export default function CartPage({ user }: CartPageProps) {
       {/* Header */}
       <div className="page-hero">
         <div className="page-hero__inner">
-          <Link to="/customer/home" className="page-back-link">
+          <Link to={homeLink} className="page-back-link">
             <ArrowLeft className="w-5 h-5 mr-2" />
             <span className="text-lg">Back to Home</span>
           </Link>
@@ -166,13 +173,27 @@ export default function CartPage({ user }: CartPageProps) {
               <span className="font-semibold text-gray-900">RM {getCartTotal().toFixed(2)}</span>
             </div>
             <p className="text-sm text-gray-600">Delivery charges will be calculated at checkout</p>
+            {!user && (
+              <p className="text-sm text-orange-700 bg-orange-50 border border-orange-200 rounded-lg p-3">
+                You'll need to login or create a free account to complete your order — your cart will be waiting for you.
+              </p>
+            )}
             <Button
               onClick={handleCheckout}
               size="lg"
               className="w-full h-14 text-lg success-button"
             >
-              <ShoppingCart className="w-6 h-6 mr-2" />
-              Proceed to Checkout
+              {user ? (
+                <>
+                  <ShoppingCart className="w-6 h-6 mr-2" />
+                  Proceed to Checkout
+                </>
+              ) : (
+                <>
+                  <LogIn className="w-6 h-6 mr-2" />
+                  Login to Checkout
+                </>
+              )}
             </Button>
           </CardContent>
         </Card>

@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router';
 import { useState, useEffect } from 'react';
 import { Toaster } from './components/ui/sonner';
 import { CartProvider } from './context/CartContext';
@@ -43,6 +43,89 @@ export interface User {
   profilePicture?: string;
   address?: string;
   notes?: string;
+}
+
+interface AppRoutesProps {
+  user: User | null;
+  setUser: (user: User) => void;
+  handleLogout: () => void;
+  handleProfileUpdate: (updatedUser: User) => void;
+}
+
+function AppRoutes({ user, setUser, handleLogout, handleProfileUpdate }: AppRoutesProps) {
+  const location = useLocation();
+  // Set by the cart page when a guest tries to checkout, so login/register can
+  // send them back to the cart they built instead of the default home page.
+  const from = (location.state as { from?: string } | null)?.from;
+  const postAuthTarget = (u: User) => (u.role === 'admin' ? '/admin/dashboard' : (from || '/customer/home'));
+
+  return (
+    <>
+      <Header user={user} onLogout={handleLogout} />
+      <div className="app-shell">
+        <Routes>
+          {/* Public Routes */}
+          <Route path="/" element={user ? <Navigate to={user.role === 'admin' ? '/admin/dashboard' : '/customer/home'} replace /> : <WelcomePage />} />
+          <Route path="/login" element={user ? <Navigate to={postAuthTarget(user)} replace /> : <LoginPage />} />
+          <Route path="/register" element={user ? <Navigate to={postAuthTarget(user)} replace /> : <RegisterPage onRegisterSuccess={(u) => setUser(u)} />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+
+          {/* Guest-accessible shopping routes — browsing, building a cart, and adding
+              items never requires an account; only checkout does (gated inside CartPage). */}
+          <Route path="/customer/product/:productId" element={<ProductDetailPage user={user} />} />
+          <Route path="/customer/order/:productId" element={<ProductOrderPage user={user} />} />
+          <Route path="/customer/cart" element={<CartPage user={user} />} />
+
+          {/* Customer Routes */}
+          <Route
+            path="/customer/*"
+            element={
+              user?.role === 'customer' ? (
+                <Routes>
+                  <Route path="home" element={<CustomerHomePage user={user} />} />
+                  <Route path="checkout" element={<CheckoutPage user={user} />} />
+                  <Route path="payment" element={<ToyyibPayPage user={user} />} />
+                  <Route path="payment-return" element={<ToyyibPayReturnPage user={user} />} />
+                  <Route path="order-confirmation" element={<OrderConfirmationPage />} />
+                  <Route path="tracking" element={<CustomerOrderTrackingPage user={user} />} />
+                  <Route path="receipt/:orderId" element={<OrderReceiptPage user={user} />} />
+                  <Route path="profile" element={<ProfilePage user={user} onLogout={handleLogout} onProfileUpdate={handleProfileUpdate} />} />
+                </Routes>
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+
+          {/* Admin Routes */}
+          <Route
+            path="/admin/*"
+            element={
+              user?.role === 'admin' ? (
+                <Routes>
+                  <Route path="dashboard" element={<AdminDashboard user={user} />} />
+                  <Route path="orders" element={<OrderManagementPage user={user} />} />
+                  <Route path="schedule" element={<ProductionSchedulePage user={user} />} />
+                  <Route path="ingredients" element={<IngredientEstimationPage user={user} />} />
+                  <Route path="settings" element={<AdminSettingsPage user={user} />} />
+                  <Route path="products" element={<ProductManagementPage user={user} />} />
+                  <Route path="analytics" element={<AnalyticsDashboard user={user} />} />
+                  <Route path="profile" element={<AdminProfilePage user={user} onLogout={handleLogout} onProfileUpdate={handleProfileUpdate} />} />
+                </Routes>
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+
+          {/* Fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+        <InstallAppPrompt />
+        <Toaster />
+      </div>
+    </>
+  );
 }
 
 function App() {
@@ -114,66 +197,7 @@ function App() {
   return (
     <CartProvider>
       <BrowserRouter>
-        <Header user={user} onLogout={handleLogout} />
-        <div className="app-shell">
-          <Routes>
-            {/* Public Routes */}
-            <Route path="/" element={user ? <Navigate to={user.role === 'admin' ? '/admin/dashboard' : '/customer/home'} replace /> : <WelcomePage />} />
-            <Route path="/login" element={user ? <Navigate to={user.role === 'admin' ? '/admin/dashboard' : '/customer/home'} replace /> : <LoginPage />} />
-            <Route path="/register" element={user ? <Navigate to="/customer/home" replace /> : <RegisterPage onRegisterSuccess={(u) => setUser(u)} />} />
-            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-
-            {/* Customer Routes */}
-            <Route
-              path="/customer/*"
-              element={
-                user?.role === 'customer' ? (
-                  <Routes>
-                    <Route path="home" element={<CustomerHomePage user={user} />} />
-                    <Route path="product/:productId" element={<ProductDetailPage user={user} />} />
-                    <Route path="order/:productId" element={<ProductOrderPage user={user} />} />
-                    <Route path="cart" element={<CartPage user={user} />} />
-                    <Route path="checkout" element={<CheckoutPage user={user} />} />
-                    <Route path="payment" element={<ToyyibPayPage user={user} />} />
-                    <Route path="payment-return" element={<ToyyibPayReturnPage user={user} />} />
-                    <Route path="order-confirmation" element={<OrderConfirmationPage />} />
-                    <Route path="tracking" element={<CustomerOrderTrackingPage user={user} />} />
-                    <Route path="receipt/:orderId" element={<OrderReceiptPage user={user} />} />
-                    <Route path="profile" element={<ProfilePage user={user} onLogout={handleLogout} onProfileUpdate={handleProfileUpdate} />} />
-                  </Routes>
-                ) : (
-                  <Navigate to="/login" replace />
-                )
-              }
-            />
-
-            {/* Admin Routes */}
-            <Route
-              path="/admin/*"
-              element={
-                user?.role === 'admin' ? (
-                  <Routes>
-                    <Route path="dashboard" element={<AdminDashboard user={user} />} />
-                    <Route path="orders" element={<OrderManagementPage user={user} />} />
-                    <Route path="schedule" element={<ProductionSchedulePage user={user} />} />
-                    <Route path="ingredients" element={<IngredientEstimationPage user={user} />} />
-                    <Route path="settings" element={<AdminSettingsPage user={user} />} />
-                    <Route path="products" element={<ProductManagementPage user={user} />} />
-                    <Route path="analytics" element={<AnalyticsDashboard user={user} />} />
-                    <Route path="profile" element={<AdminProfilePage user={user} onLogout={handleLogout} onProfileUpdate={handleProfileUpdate} />} />
-                  </Routes>
-                ) : (
-                  <Navigate to="/login" replace />
-                )
-              }
-            />
-
-            {/* Fallback */}
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-          <InstallAppPrompt />
-          <Toaster />
-        </div>
+        <AppRoutes user={user} setUser={setUser} handleLogout={handleLogout} handleProfileUpdate={handleProfileUpdate} />
       </BrowserRouter>
     </CartProvider>
   );

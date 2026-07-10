@@ -66,7 +66,7 @@ export default function Header({ user, onLogout }: { user: any; onLogout?: () =>
           </nav>
 
           <div className="flex items-center gap-3">
-            {user?.role === 'customer' && (
+            {(!user || user.role === 'customer') && (
               <Link to="/customer/cart" aria-label="Cart" className="header-icon-button relative">
                 <ShoppingCart className="w-5 h-5" />
                 {cartCount > 0 && (

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -12,6 +12,7 @@ import PageContainer from '../components/ui/PageContainer';
 import FormSection from '../components/ui/FormSection';
 
 export default function LoginPage() {
+  const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -107,7 +108,7 @@ export default function LoginPage() {
               <div className="w-full space-y-2 text-sm text-gray-600">
                 <p>
                   Don&apos;t have an account?{' '}
-                  <Link to="/register" className="font-medium text-orange-600 hover:text-orange-700 hover:underline">
+                  <Link to="/register" state={location.state} className="font-medium text-orange-600 hover:text-orange-700 hover:underline">
                     Register here
                   </Link>
                 </p>

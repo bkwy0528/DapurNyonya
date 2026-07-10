@@ -10,13 +10,14 @@ import { getProducts } from '../../utils/db';
 import { onImageError } from '../../utils/imageFallback';
 
 interface ProductDetailPageProps {
-  user: User;
+  user: User | null;
 }
 
-export default function ProductDetailPage({ user: _user }: ProductDetailPageProps) {
+export default function ProductDetailPage({ user }: ProductDetailPageProps) {
   const { productId } = useParams();
   const [product, setProduct] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const homeLink = user ? '/customer/home' : '/';
 
   useEffect(() => {
     getProducts().then(products => {
@@ -34,7 +35,7 @@ export default function ProductDetailPage({ user: _user }: ProductDetailPageProp
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <h2 className="text-2xl font-semibold text-gray-900 mb-4">Product not found</h2>
-          <Link to="/customer/home"><Button>Back to Home</Button></Link>
+          <Link to={homeLink}><Button>Back to Home</Button></Link>
         </div>
       </div>
     );
@@ -44,7 +45,7 @@ export default function ProductDetailPage({ user: _user }: ProductDetailPageProp
     <div className="min-h-screen pb-24">
       <div className="page-hero">
         <div className="page-hero__inner">
-          <Link to="/customer/home" className="page-back-link">
+          <Link to={homeLink} className="page-back-link">
             <ArrowLeft className="w-5 h-5 mr-2" />
             <span className="text-lg">Back to Products</span>
           </Link>

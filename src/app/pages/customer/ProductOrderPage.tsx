@@ -15,10 +15,10 @@ import { getProducts } from '../../utils/db';
 import { onImageError } from '../../utils/imageFallback';
 
 interface ProductOrderPageProps {
-  user: User;
+  user: User | null;
 }
 
-export default function ProductOrderPage({ user: _user }: ProductOrderPageProps) {
+export default function ProductOrderPage({ user }: ProductOrderPageProps) {
   const navigate = useNavigate();
   const { productId } = useParams();
   const { addToCart } = useCart();
@@ -26,6 +26,7 @@ export default function ProductOrderPage({ user: _user }: ProductOrderPageProps)
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
   const [notes, setNotes] = useState('');
+  const homeLink = user ? '/customer/home' : '/';
 
   useEffect(() => {
     if (productId) {
@@ -47,7 +48,7 @@ export default function ProductOrderPage({ user: _user }: ProductOrderPageProps)
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <h2 className="text-2xl font-semibold text-gray-900 mb-4">Product not found</h2>
-          <Link to="/customer/home"><Button>Back to Home</Button></Link>
+          <Link to={homeLink}><Button>Back to Home</Button></Link>
         </div>
       </div>
     );
@@ -66,7 +67,7 @@ export default function ProductOrderPage({ user: _user }: ProductOrderPageProps)
   return (
     <PageContainer>
       <div className="page-hero page-hero--rounded">
-        <Link to="/customer/home" className="page-back-link">
+        <Link to={homeLink} className="page-back-link">
           <ArrowLeft className="w-5 h-5 mr-2" />
           <span className="text-lg">Back to Products</span>
         </Link>
