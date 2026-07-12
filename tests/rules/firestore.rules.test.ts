@@ -145,38 +145,26 @@ describe('orders — read', () => {
   });
 });
 
-describe('orders — customer self-cancel', () => {
-  it('lets a customer cancel their own order while Pending Approval', async () => {
+describe('orders — update', () => {
+  // Customer self-cancel was removed along with cash payment: orders are paid
+  // before they exist, so customers have no write access to orders at all —
+  // not even the previously-allowed Pending Approval → Cancelled transition.
+  it('blocks a customer from cancelling their own order, even one still Pending Approval', async () => {
     await seed('orders/o1', { customerId: 'cust-1', status: 'Pending Approval', total: 25 });
-    await assertSucceeds(updateDoc(doc(customer('cust-1'), 'orders/o1'), {
+    await assertFails(updateDoc(doc(customer('cust-1'), 'orders/o1'), {
       status: 'Cancelled',
-      cancelledAt: '2026-07-09T00:00:00.000Z',
+      cancelledAt: '2026-07-13T00:00:00.000Z',
     }));
   });
 
-  it('blocks cancelling an order that has moved past Pending Approval', async () => {
+  it('blocks a customer from updating any field on their own order', async () => {
     await seed('orders/o1', { customerId: 'cust-1', status: 'Order Received', total: 25 });
-    await assertFails(updateDoc(doc(customer('cust-1'), 'orders/o1'), {
-      status: 'Cancelled',
-      cancelledAt: '2026-07-09T00:00:00.000Z',
-    }));
+    await assertFails(updateDoc(doc(customer('cust-1'), 'orders/o1'), { total: 0 }));
   });
 
-  it('blocks a customer from changing any field other than status/cancelledAt while cancelling', async () => {
+  it('blocks a customer from updating someone else\'s order', async () => {
     await seed('orders/o1', { customerId: 'cust-1', status: 'Pending Approval', total: 25 });
-    await assertFails(updateDoc(doc(customer('cust-1'), 'orders/o1'), {
-      status: 'Cancelled',
-      cancelledAt: '2026-07-09T00:00:00.000Z',
-      total: 0, // sneaking in an unrelated field change alongside a legal cancel
-    }));
-  });
-
-  it('blocks a customer from cancelling someone else\'s order', async () => {
-    await seed('orders/o1', { customerId: 'cust-1', status: 'Pending Approval', total: 25 });
-    await assertFails(updateDoc(doc(customer('cust-2'), 'orders/o1'), {
-      status: 'Cancelled',
-      cancelledAt: '2026-07-09T00:00:00.000Z',
-    }));
+    await assertFails(updateDoc(doc(customer('cust-2'), 'orders/o1'), { status: 'Cancelled' }));
   });
 
   it('lets the admin update an order to any status at any stage', async () => {
@@ -207,18 +195,13 @@ describe('orderCounts', () => {
     await assertFails(setDoc(doc(anon(), 'orderCounts/2026-07-09'), { count: 1 }));
   });
 
-  // Increments happen only server-side in submitOrder (Admin SDK); the sole
-  // client write allowed is releasing a booked slot — count decremented by
-  // exactly 1 — which is what customer self-cancel performs.
-  it('lets a signed-in customer release a slot (decrement the count by exactly 1)', async () => {
+  // Increments happen only server-side in submitOrder (Admin SDK). The
+  // decrement-by-1 client write that customer self-cancel used to perform is
+  // gone with the cancel feature — every customer write is now rejected.
+  it('blocks a signed-in customer from any capacity write, including the old release-a-slot decrement', async () => {
     await seed('orderCounts/2026-07-09', { count: 3 });
-    await assertSucceeds(setDoc(doc(customer('cust-1'), 'orderCounts/2026-07-09'), { count: 2 }));
-  });
-
-  it('blocks a signed-in customer from any other capacity write (increment, jump, or arbitrary overwrite)', async () => {
-    await seed('orderCounts/2026-07-09', { count: 3 });
+    await assertFails(setDoc(doc(customer('cust-1'), 'orderCounts/2026-07-09'), { count: 2 })); // old self-cancel decrement
     await assertFails(setDoc(doc(customer('cust-1'), 'orderCounts/2026-07-09'), { count: 4 })); // increment
-    await assertFails(setDoc(doc(customer('cust-1'), 'orderCounts/2026-07-09'), { count: 1 })); // double decrement
     await assertFails(setDoc(doc(customer('cust-1'), 'orderCounts/2026-07-09'), { count: 999 })); // overwrite
   });
 
@@ -282,9 +265,8 @@ describe('settings and dailyLimits', () => {
 });
 
 describe('counters', () => {
-  // Online orders get their finalized number assigned server-side in
-  // submitOrder now, so the only client writer left is the admin approving a
-  // cash order — customers no longer need (or get) any access.
+  // Every order gets its finalized number assigned server-side in submitOrder
+  // — customers no longer need (or get) any access; admin keeps it for manual fixes.
   it('blocks a signed-in customer from reading or writing the daily order-number counter', async () => {
     await seed('counters/orders-260709', { count: 1 });
     await assertFails(getDoc(doc(customer('cust-1'), 'counters/orders-260709')));

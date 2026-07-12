@@ -19,22 +19,15 @@ service cloud.firestore {
     // Orders: customers can read their own, admin can read/write all. Orders
     // are never created directly by a client — the submitOrder Cloud Function
     // (Admin SDK, bypasses these rules) recomputes prices from the real
-    // product catalog and, for online payments, checks a server-recorded
-    // payment confirmation before writing anything. That closes a prior gap
-    // where a client could set its own total or mark itself as paid.
-    // Customers may still cancel their own order client-side, but only while
-    // it is still Pending Approval and only by setting status to Cancelled.
+    // product catalog and checks a server-recorded payment confirmation before
+    // writing anything. That closes a prior gap where a client could set its
+    // own total or mark itself as paid. Customer self-cancel was removed along
+    // with cash: every order is paid before it exists, so customers get no
+    // write access at all.
     match /orders/{orderId} {
       allow read: if isAdmin() || (isSignedIn() && resource.data.customerId == request.auth.uid);
       allow create: if false;
-      allow update: if isAdmin() || (
-        isSignedIn()
-        && resource.data.customerId == request.auth.uid
-        && resource.data.status == 'Pending Approval'
-        && request.resource.data.status == 'Cancelled'
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledAt'])
-      );
-      allow delete: if isAdmin();
+      allow update, delete: if isAdmin();
     }
 
     // Payment confirmations: written only by the toyyibpayCallback Cloud
@@ -46,18 +39,12 @@ service cloud.firestore {
 
     // Per-date order counters: public read so customers can check remaining
     // capacity at checkout. Increments happen only server-side in submitOrder
-    // (Admin SDK, bypasses these rules). The only client write allowed is
-    // releasing a booked slot — the count decremented by exactly 1 — which is
-    // what customer self-cancel does; anything else (arbitrary overwrites that
-    // could corrupt capacity checks for other customers) is rejected.
+    // (Admin SDK, bypasses these rules). Customer self-cancel — the one client
+    // write this used to allow (decrement-by-1 to release a slot) — is gone,
+    // so writes are admin-only now.
     match /orderCounts/{dateKey} {
       allow read: if true;
-      allow write: if isAdmin() || (
-        isSignedIn()
-        && request.resource.data.keys().hasOnly(['count'])
-        && request.resource.data.count is int
-        && request.resource.data.count == (resource == null ? -1 : resource.data.count - 1)
-      );
+      allow write: if isAdmin();
     }
 
     // Settings: anyone can read (business hours / delivery info shown to customers), only admin writes
@@ -83,9 +70,9 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
-    // Daily order-number counters: online orders get their finalized number
-    // assigned server-side in submitOrder now, so the only client writer left
-    // is the admin approving a cash order — locked back down to admin.
+    // Daily order-number counters: every order gets its finalized number
+    // assigned server-side in submitOrder — no client writes at all anymore,
+    // kept admin-only for manual fixes.
     match /counters/{counterId} {
       allow read, write: if isAdmin();
     }

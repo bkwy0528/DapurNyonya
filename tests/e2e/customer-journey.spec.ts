@@ -1,13 +1,14 @@
 import { test, expect } from '@playwright/test';
-import { registerCustomer, selectFirstAvailableCalendarDate } from './helpers/registerCustomer';
+import { registerCustomer, selectFirstAvailableCalendarDate, deliveryDateDaysFromNow } from './helpers/registerCustomer';
+import { seedPaidOrder } from './helpers/seedOrder';
 
-// Full happy-path customer journey against the seeded catalog (see
-// global-setup.ts): browse -> add to cart -> checkout (pickup + cash) ->
-// confirm -> tracking -> cancel. One continuous flow rather than one test per
-// step, since each step's state depends on the last and re-registering a
-// fresh customer per assertion would mostly be re-testing the same wiring.
+// Cash checkout is gone — every order is paid on ToyyibPay's hosted page,
+// which doesn't exist inside the emulator. So the journey splits in two:
+// the UI is exercised up to the handoff to the payment page, and the
+// post-payment experience (tracking, receipt) runs against an order seeded
+// exactly the way submitOrder writes one (paid, numbered, Order Received).
 
-test('customer can place a pickup/cash order and see it in tracking', async ({ page }) => {
+test('customer can build a cart and reach the online payment step', async ({ page }) => {
   await registerCustomer(page, 'Pickup Customer');
 
   // Confirms browsing works (both seeded products render), then navigates by
@@ -18,48 +19,45 @@ test('customer can place a pickup/cash order and see it in tracking', async ({ p
   await expect(page.getByRole('heading', { name: 'Festive Cookies' })).toBeVisible();
   await page.goto('/customer/order/1');
 
-  // Bump quantity to 2 and add a note before adding to cart. The +/- buttons
-  // are icon-only with no accessible name (a known gap — QA strategy §17.2),
-  // so this locates by the lucide "plus" icon's own class rather than a role.
-  await page.locator('button:has(svg.lucide-plus)').click();
+  // Type the quantity directly (the field is editable now — bulk customers no
+  // longer press "+" twenty times) and add a note before adding to cart.
+  await page.getByRole('textbox', { name: 'Quantity' }).fill('2');
   await page.locator('#notes').fill('No peanuts please');
   await page.getByRole('button', { name: 'Add to Cart' }).click();
   await expect(page).toHaveURL(/\/customer\/cart$/);
   await expect(page.getByText('Traditional Dumplings')).toBeVisible();
   await expect(page.getByText('RM 50.00').first()).toBeVisible(); // 25.00 x 2 (item line + subtotal both show it)
 
+  // The header badge counts distinct products, not units — 2 dumplings = "1".
+  await expect(page.locator('.cart-badge')).toHaveText('1');
+
   await page.getByRole('button', { name: 'Proceed to Checkout' }).click();
   await expect(page).toHaveURL(/\/customer\/checkout$/);
 
   await selectFirstAvailableCalendarDate(page);
   await page.locator('#phone').fill('123456789');
-  await page.getByText('Cash', { exact: true }).click();
-  await page.getByRole('button', { name: 'Review My Order' }).click();
+  await page.getByText('DuitNow QR / E-Wallet', { exact: true }).click();
+  await page.getByRole('button', { name: 'Proceed to Online Payment' }).click();
 
-  await expect(page).toHaveURL(/\/customer\/order-confirmation$/);
-  await expect(page.getByText('Confirm Your Order')).toBeVisible();
-  await page.getByRole('button', { name: 'Confirm & Submit Order' }).click();
-  await expect(page.getByText('Order Submitted!')).toBeVisible();
-
-  await page.waitForURL('**/customer/tracking', { timeout: 8000 });
-  await expect(page.getByText('Pending Approval')).toBeVisible();
-  await expect(page.getByText('Traditional Dumplings')).toBeVisible();
+  // The handoff to ToyyibPay is the emulator boundary — reaching the payment
+  // route with the order still pending in sessionStorage is the success state.
+  await expect(page).toHaveURL(/\/customer\/payment$/);
 });
 
-test('customer can cancel a pending order from tracking', async ({ page }) => {
-  await registerCustomer(page, 'Cancel Customer');
-  await page.goto('/customer/order/1');
-  await page.getByRole('button', { name: 'Add to Cart' }).click();
-  await page.getByRole('button', { name: 'Proceed to Checkout' }).click();
+test('a paid order appears in tracking with its receipt, and cannot be cancelled', async ({ page }) => {
+  const { email } = await registerCustomer(page, 'Tracking Customer');
+  const { finalizedNumber } = await seedPaidOrder(email, deliveryDateDaysFromNow(5));
 
-  await selectFirstAvailableCalendarDate(page);
-  await page.locator('#phone').fill('123456789');
-  await page.getByText('Cash', { exact: true }).click();
-  await page.getByRole('button', { name: 'Review My Order' }).click();
-  await page.getByRole('button', { name: 'Confirm & Submit Order' }).click();
-  await page.waitForURL('**/customer/tracking', { timeout: 8000 });
+  await page.goto('/customer/tracking');
+  await expect(page.getByText(finalizedNumber)).toBeVisible();
+  await expect(page.getByText('Order Received').first()).toBeVisible();
+  await expect(page.getByText('Traditional Dumplings')).toBeVisible();
 
-  await page.getByRole('button', { name: 'Cancel This Order' }).click();
-  await page.getByRole('button', { name: 'Yes, Cancel It' }).click();
-  await expect(page.getByText('Order Cancelled')).toBeVisible();
+  // Self-cancel was removed along with cash — no cancel affordance anywhere.
+  await expect(page.getByRole('button', { name: /Cancel/ })).not.toBeVisible();
+
+  await page.getByRole('button', { name: 'View Receipt' }).click();
+  await expect(page).toHaveURL(/\/customer\/receipt\//);
+  await expect(page.getByText(finalizedNumber)).toBeVisible();
+  await expect(page.getByText('Paid Online')).toBeVisible();
 });

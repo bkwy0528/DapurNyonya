@@ -81,7 +81,7 @@ test.describe('checkout — validation', () => {
 
     // Clear the phone field, which is otherwise pre-filled from registration.
     await page.locator('#phone').fill('');
-    await page.getByRole('button', { name: 'Review My Order' }).click();
+    await page.getByRole('button', { name: 'Proceed to Online Payment' }).click();
 
     await expect(page.getByText('Please select a pickup/delivery date')).toBeVisible();
     await expect(page.getByText('Please provide a contact phone number')).toBeVisible();
@@ -107,9 +107,9 @@ test.describe('checkout — validation', () => {
   test('orders meeting the bulk minimum can pick any available date', async ({ page }) => {
     await registerCustomer(page, 'Bulk Order Customer');
     await page.goto('/customer/order/1');
-    // Bump quantity from 1 to 20 — the default bulk minimum.
-    const plus = page.locator('button:has(svg.lucide-plus)');
-    for (let i = 0; i < 19; i++) await plus.click();
+    // Type 20 — the default bulk minimum — straight into the quantity field
+    // (the same affordance that saves real bulk customers 19 "+" presses).
+    await page.getByRole('textbox', { name: 'Quantity' }).fill('20');
     await page.getByRole('button', { name: 'Add to Cart' }).click();
     await page.getByRole('button', { name: 'Proceed to Checkout' }).click();
 

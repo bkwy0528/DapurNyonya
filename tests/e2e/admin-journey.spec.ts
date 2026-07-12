@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/adminAuth';
-import { registerCustomer, selectFirstAvailableCalendarDate } from './helpers/registerCustomer';
+import { registerCustomer, deliveryDateDaysFromNow } from './helpers/registerCustomer';
+import { seedPaidOrder } from './helpers/seedOrder';
 
 test('admin dashboard and product management reflect the seeded catalog', async ({ page }) => {
   await loginAsAdmin(page);
@@ -81,21 +82,17 @@ test('admin can upload a product photo through the crop dialog', async ({ page }
   await expect(page.getByRole('img', { name: 'Ondeh Ondeh' })).toBeVisible();
 });
 
-test('admin can approve a pending order and the customer sees the updated status', async ({ browser }) => {
+test('admin can move a paid order through fulfilment and the customer sees the updated status', async ({ browser }) => {
   const customerContext = await browser.newContext();
   const customerPage = await customerContext.newPage();
-  const { name: customerName } = await registerCustomer(customerPage, 'Order For Admin Approval');
+  const { email, name: customerName } = await registerCustomer(customerPage, 'Order For Admin Fulfilment');
 
-  await customerPage.goto('/customer/order/1');
-  await customerPage.getByRole('button', { name: 'Add to Cart' }).click();
-  await customerPage.getByRole('button', { name: 'Proceed to Checkout' }).click();
-  await selectFirstAvailableCalendarDate(customerPage);
-  await customerPage.locator('#phone').fill('123456789');
-  await customerPage.getByText('Cash', { exact: true }).click();
-  await customerPage.getByRole('button', { name: 'Review My Order' }).click();
-  await customerPage.getByRole('button', { name: 'Confirm & Submit Order' }).click();
-  await customerPage.waitForURL('**/customer/tracking', { timeout: 8000 });
-  await expect(customerPage.getByText('Pending Approval')).toBeVisible();
+  // Orders arrive already paid and numbered (there is no approval step and no
+  // in-emulator way to pay), so the admin flow starts from a seeded paid order.
+  await seedPaidOrder(email, deliveryDateDaysFromNow(5));
+
+  await customerPage.goto('/customer/tracking');
+  await expect(customerPage.getByText('Order Received').first()).toBeVisible();
 
   const adminContext = await browser.newContext();
   const adminPage = await adminContext.newPage();
@@ -104,11 +101,14 @@ test('admin can approve a pending order and the customer sees the updated status
 
   // The order card's whole header is the expand/collapse toggle.
   await adminPage.getByText(customerName).click();
-  await adminPage.getByRole('button', { name: 'Approve Order' }).click();
+  // Approve/Reject are gone — the first action on a fresh order is preparation.
+  await expect(adminPage.getByRole('button', { name: 'Approve Order' })).not.toBeVisible();
+  await expect(adminPage.getByRole('button', { name: 'Reject Order' })).not.toBeVisible();
+  await adminPage.getByRole('button', { name: 'Start Preparation' }).click();
   await expect(adminPage.getByText('Order status updated!')).toBeVisible();
 
   await customerPage.reload();
-  await expect(customerPage.getByText('Order Received').first()).toBeVisible();
+  await expect(customerPage.getByText('In Preparation').first()).toBeVisible();
 
   await customerContext.close();
   await adminContext.close();

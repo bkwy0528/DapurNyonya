@@ -52,7 +52,6 @@ export default function ToyyibPayReturnPage({ user }: ToyyibPayReturnPageProps) 
             deliveryMethod: pendingOrder.deliveryMethod,
             deliveryAddress: pendingOrder.deliveryAddress,
             postalCode: pendingOrder.postalCode,
-            deliveryCharge: pendingOrder.deliveryCharge,
             contactPhone: pendingOrder.customerPhone,
             specialInstructions: pendingOrder.specialInstructions,
             paymentMethod: pendingOrder.paymentMethod,

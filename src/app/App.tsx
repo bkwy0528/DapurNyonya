@@ -28,7 +28,6 @@ import ProductManagementPage from './pages/admin/ProductManagementPage';
 import AdminProfilePage from './pages/admin/AdminProfilePage';
 import CartPage from './pages/customer/CartPage';
 import CheckoutPage from './pages/customer/CheckoutPage';
-import OrderConfirmationPage from './pages/customer/OrderConfirmationPage';
 import ToyyibPayPage from './pages/customer/ToyyibPayPage';
 import ToyyibPayReturnPage from './pages/customer/ToyyibPayReturnPage';
 import OrderReceiptPage from './pages/customer/OrderReceiptPage';
@@ -86,7 +85,6 @@ function AppRoutes({ user, setUser, handleLogout, handleProfileUpdate }: AppRout
                   <Route path="checkout" element={<CheckoutPage user={user} />} />
                   <Route path="payment" element={<ToyyibPayPage user={user} />} />
                   <Route path="payment-return" element={<ToyyibPayReturnPage user={user} />} />
-                  <Route path="order-confirmation" element={<OrderConfirmationPage />} />
                   <Route path="tracking" element={<CustomerOrderTrackingPage user={user} />} />
                   <Route path="receipt/:orderId" element={<OrderReceiptPage user={user} />} />
                   <Route path="profile" element={<ProfilePage user={user} onLogout={handleLogout} onProfileUpdate={handleProfileUpdate} />} />

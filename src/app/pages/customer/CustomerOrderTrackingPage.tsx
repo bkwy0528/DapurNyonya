@@ -3,15 +3,13 @@ import { Link } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Progress } from '../../components/ui/progress';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
 import { ArrowLeft, Package, Clock, Truck, AlertCircle, Receipt, Home as HomeIcon, XCircle } from 'lucide-react';
 import { User } from '../../App';
-import { getOrdersByCustomer, updateOrderFieldsReleasingSlot } from '../../utils/db';
+import { getOrdersByCustomer } from '../../utils/db';
 import { getStatusStyle } from '../../utils/statusStyles';
 import { onImageError } from '../../utils/imageFallback';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { Button } from '../../components/ui/button';
-import { toast } from 'sonner';
 
 interface CustomerOrderTrackingPageProps {
   user: User;
@@ -36,8 +34,6 @@ const getStatusSteps = (deliveryMethod: string) =>
 export default function CustomerOrderTrackingPage({ user }: CustomerOrderTrackingPageProps) {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [orderToCancel, setOrderToCancel] = useState<any>(null);
-  const [cancelling, setCancelling] = useState(false);
 
   const loadOrders = () => {
     getOrdersByCustomer(user.id)
@@ -48,25 +44,6 @@ export default function CustomerOrderTrackingPage({ user }: CustomerOrderTrackin
   };
 
   useEffect(() => { loadOrders(); }, [user.id]);
-
-  const handleCancelOrder = async () => {
-    if (!orderToCancel || cancelling) return;
-    setCancelling(true);
-    try {
-      await updateOrderFieldsReleasingSlot(
-        orderToCancel.id,
-        { status: 'Cancelled', cancelledAt: new Date().toISOString() },
-        orderToCancel.deliveryDate,
-      );
-      toast.success('Your order has been cancelled');
-      setOrderToCancel(null);
-      loadOrders();
-    } catch {
-      toast.error('Could not cancel the order. Please try again.');
-    } finally {
-      setCancelling(false);
-    }
-  };
 
   const getStatusProgress = (status: string, deliveryMethod: string) => {
     const isDelivery = deliveryMethod === 'delivery';
@@ -167,23 +144,17 @@ export default function CustomerOrderTrackingPage({ user }: CustomerOrderTrackin
                       )}
                     </div>
 
+                    {/* Legacy display only — new orders are paid online and start
+                        at Order Received, so this status can no longer occur. */}
                     {order.status === 'Pending Approval' && (
-                      <div className="warning-box space-y-3">
+                      <div className="warning-box">
                         <div className="flex items-start space-x-3">
                           <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-1" />
                           <div>
                             <p className="font-semibold text-yellow-800 mb-1">Order Being Processed</p>
-                            <p className="text-sm text-yellow-700">Your order is awaiting approval from the seller. You'll be notified once it's confirmed.</p>
+                            <p className="text-sm text-yellow-700">Your order is awaiting confirmation from the seller.</p>
                           </div>
                         </div>
-                        <Button
-                          variant="outline"
-                          onClick={() => setOrderToCancel(order)}
-                          className="w-full sm:w-auto border-2 border-red-200 text-red-600 hover:bg-red-50"
-                        >
-                          <XCircle className="w-4 h-4 mr-2" />
-                          Cancel This Order
-                        </Button>
                       </div>
                     )}
 
@@ -258,26 +229,6 @@ export default function CustomerOrderTrackingPage({ user }: CustomerOrderTrackin
           </div>
         )}
       </div>
-
-      <Dialog open={orderToCancel !== null} onOpenChange={(open) => !open && setOrderToCancel(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Cancel this order?</DialogTitle>
-          </DialogHeader>
-          <p className="text-gray-700">
-            Are you sure you want to cancel <strong>{orderToCancel ? getOrderLabel(orderToCancel) : ''}</strong>?
-            This cannot be undone — you would need to place a new order.
-          </p>
-          <div className="flex gap-3 pt-2">
-            <Button variant="outline" onClick={() => setOrderToCancel(null)} className="flex-1 h-12">
-              Keep My Order
-            </Button>
-            <Button variant="destructive" onClick={handleCancelOrder} disabled={cancelling} className="flex-1 h-12">
-              {cancelling ? 'Cancelling…' : 'Yes, Cancel It'}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

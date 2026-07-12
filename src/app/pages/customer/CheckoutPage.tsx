@@ -1,14 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { getFunctions, httpsCallable } from 'firebase/functions';
-import { firebaseApp } from '../../../firebase';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { RadioGroup, RadioGroupItem } from '../../components/ui/radio-group';
 import { Textarea } from '../../components/ui/textarea';
-import { ArrowLeft, MapPin, Truck, Home as HomeIcon, Calendar, Banknote, Smartphone, Building2, CheckCircle2, Loader2 } from 'lucide-react';
+import { ArrowLeft, MapPin, Truck, Home as HomeIcon, Calendar, Smartphone, Building2, CheckCircle2 } from 'lucide-react';
 import { Calendar as CalendarPicker } from '../../components/ui/calendar';
 import { useCart } from '../../context/CartContext';
 import { DEFAULT_ORDERING_RULES, getBulkOrderStatus, getMaxPrepDaysFromCart, normalizeOrderingRules, WEEKDAY_LABELS } from '../../utils/business';
@@ -16,11 +14,10 @@ import { User } from '../../App';
 import PageContainer from '../../components/ui/PageContainer';
 import FormSection from '../../components/ui/FormSection';
 import { getDailyLimits, getOrderCountForDate, getProducts, getSettings } from '../../utils/db';
-import { geocodeAddress } from '../../utils/geocode';
-import { feeForDistanceKm, feeForPostalCode, MAX_DELIVERY_KM } from '../../utils/delivery';
 
+// Cash was removed on the admin's request — every order is paid online before
+// it exists, which is also what lets orders skip the old approval step.
 const paymentOptions = [
-  { value: 'cash' as const, Icon: Banknote, label: 'Cash', desc: 'Pay on pickup only — not available for delivery orders' },
   { value: 'tng' as const, Icon: Smartphone, label: 'DuitNow QR / E-Wallet', desc: "e.g. Touch 'n Go, GrabPay, Boost, ShopeePay, MAE, or your banking app" },
   { value: 'fpx' as const, Icon: Building2, label: 'FPX Online Banking', desc: 'e.g. Maybank2u, CIMB Clicks, Public Bank, RHB, Hong Leong, Bank Islam' },
 ];
@@ -38,15 +35,11 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
   const [contactPhone, setContactPhone] = useState(user.phone);
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [deliveryDate, setDeliveryDate] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'tng' | 'fpx' | ''>('');
+  const [paymentMethod, setPaymentMethod] = useState<'tng' | 'fpx' | ''>('');
   const [paymentNote, setPaymentNote] = useState('');
   const [dateCapacity, setDateCapacity] = useState<{ count: number; limit: number } | null>(null);
   const [formErrors, setFormErrors] = useState<string[]>([]);
   const errorBoxRef = useRef<HTMLDivElement>(null);
-
-  const [deliveryCharge, setDeliveryCharge] = useState(0);
-  const [deliveryDistanceKm, setDeliveryDistanceKm] = useState<number | null>(null);
-  const [feeStatus, setFeeStatus] = useState<'idle' | 'calculating' | 'distance' | 'postal-fallback' | 'out-of-range'>('idle');
 
   // Use local date parts — toISOString() returns UTC and shifts the date after 8 PM in MY timezone
   const toLocalYMD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -88,62 +81,11 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
       .catch(() => { /* capacity display unavailable on read failure */ });
   }, [deliveryDate]);
 
-  // Distance is computed via a Cloud Function (openrouteservice key stays server-side)
-  // from the customer's geocoded address to the kitchen. If geocoding or routing
-  // fails for any reason, fall back to the old postal-code zone pricing so
-  // checkout never gets stuck.
-  //
-  // feeRequestId guards against out-of-order responses: if the address is edited
-  // again before the first lookup finishes, the earlier (now-stale) response must
-  // not be allowed to overwrite state set by the newer one.
-  const feeRequestId = useRef(0);
-
-  const calculateDeliveryFee = async () => {
-    if (deliveryMethod !== 'delivery' || !deliveryAddress.trim() || postalCode.length !== 5) return;
-    const requestId = ++feeRequestId.current;
-    setFeeStatus('calculating');
-    try {
-      const point = await geocodeAddress(deliveryAddress, postalCode);
-      if (requestId !== feeRequestId.current) return;
-      if (!point) throw new Error('Address not found');
-
-      const functions = getFunctions(firebaseApp, 'asia-southeast1');
-      const calculateDeliveryDistance = httpsCallable(functions, 'calculateDeliveryDistance');
-      const result: any = await calculateDeliveryDistance({ lat: point.lat, lon: point.lon });
-      if (requestId !== feeRequestId.current) return;
-
-      const distanceKm: number = result.data.distanceKm;
-      setDeliveryDistanceKm(distanceKm);
-
-      const fee = feeForDistanceKm(distanceKm);
-      if (fee === null) {
-        setDeliveryCharge(0);
-        setFeeStatus('out-of-range');
-      } else {
-        setDeliveryCharge(fee);
-        setFeeStatus('distance');
-      }
-    } catch {
-      if (requestId !== feeRequestId.current) return;
-      setDeliveryDistanceKm(null);
-      setDeliveryCharge(feeForPostalCode(postalCode));
-      setFeeStatus('postal-fallback');
-    }
-  };
-
-  useEffect(() => {
-    if (deliveryMethod === 'pickup') {
-      setDeliveryCharge(0);
-      setDeliveryDistanceKm(null);
-      setFeeStatus('idle');
-    } else if (paymentMethod === 'cash') {
-      // Cash is pickup-only — clear a stale selection carried over from before switching to delivery
-      setPaymentMethod('');
-    }
-  }, [deliveryMethod]);
-
+  // Delivery fees are no longer calculated or collected here — the admin
+  // arranges a Grab delivery and confirms the exact fee with the customer over
+  // WhatsApp, since it depends on the Grab rate at their chosen date and time.
   const subtotal = getCartTotal();
-  const total = subtotal + deliveryCharge;
+  const total = subtotal;
 
   const showErrors = (errors: string[]) => {
     setFormErrors(errors);
@@ -166,19 +108,8 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
     if (deliveryMethod === 'delivery' && !deliveryAddress) errors.push('Please fill in your delivery address');
     if (deliveryMethod === 'delivery' && !postalCode) errors.push('Please fill in your postal code');
     if (deliveryMethod === 'delivery' && postalCode && postalCode.length !== 5) errors.push('Postal code must be 5 digits');
-    if (deliveryMethod === 'delivery' && feeStatus === 'calculating') errors.push('Please wait for the delivery fee to finish calculating');
-    // 'idle' means the fee was never calculated at all (blur never fired on the
-    // address fields) — without this check a delivery order could go through
-    // with a RM0 delivery charge. Kick the calculation off now and have the
-    // customer press the button again once it resolves.
-    if (deliveryMethod === 'delivery' && feeStatus === 'idle' && deliveryAddress.trim() && postalCode.length === 5) {
-      calculateDeliveryFee();
-      errors.push('Calculating your delivery fee — please press Place Order again in a moment');
-    }
-    if (deliveryMethod === 'delivery' && feeStatus === 'out-of-range') errors.push(`Sorry, we don't deliver that far (over ${MAX_DELIVERY_KM}km away). Please choose Pickup or a closer address.`);
     if (!contactPhone) errors.push('Please provide a contact phone number');
     if (!paymentMethod) errors.push('Please select a payment method');
-    if (paymentMethod === 'cash' && deliveryMethod === 'delivery') errors.push('Cash is only available for pickup — please choose an online payment method, or switch to pickup');
 
     if (errors.length > 0) {
       showErrors(errors);
@@ -212,7 +143,6 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
       customerPhone: contactPhone,
       items: cartItems,
       subtotal,
-      deliveryCharge,
       total,
       deliveryMethod,
       deliveryAddress: deliveryMethod === 'delivery' ? deliveryAddress : 'Pickup',
@@ -220,18 +150,13 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
       specialInstructions,
       paymentMethod,
       paymentNote,
-      status: 'Pending Approval',
       orderDate: new Date().toISOString(),
       deliveryDate,
       finalizedNumber: null,
     };
 
     sessionStorage.setItem('pendingOrder', JSON.stringify(pendingOrder));
-    if (paymentMethod === 'tng' || paymentMethod === 'fpx') {
-      navigate('/customer/payment');
-    } else {
-      navigate('/customer/order-confirmation');
-    }
+    navigate('/customer/payment');
   };
 
   if (cartItems.length === 0) return null;
@@ -322,36 +247,29 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
                   </Label>
                   <p className="text-sm text-gray-600 mt-1">Get your order delivered to your doorstep</p>
                 </div>
-                <span className="text-lg font-bold text-orange-600">
-                  {feeStatus === 'calculating' ? <Loader2 className="w-5 h-5 animate-spin" /> : deliveryCharge > 0 ? `RM ${deliveryCharge.toFixed(2)}` : 'Calculated'}
-                </span>
+                <span className="text-sm font-semibold text-orange-600 text-right">Fee via WhatsApp</span>
               </div>
             </RadioGroup>
 
             {deliveryMethod === 'delivery' && (
               <div className="space-y-4 pt-4 border-t">
+                <div className="info-box">
+                  <p className="text-sm text-blue-900">
+                    <strong>About the delivery fee:</strong> it is not included in your order total. Delivery is
+                    arranged through Grab, so the fee depends on the Grab rate for your chosen date and time —
+                    we'll contact you on WhatsApp to confirm the exact charge.
+                  </p>
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="address" className="text-base">Delivery Address *</Label>
-                  <Textarea id="address" value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)} onBlur={calculateDeliveryFee} placeholder="Enter your complete delivery address" className="min-h-24 text-base" />
+                  <Textarea id="address" value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)} placeholder="Enter your complete delivery address" className="min-h-24 text-base" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="postalCode" className="text-base">Postal Code *</Label>
                   <div className="relative">
                     <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <Input id="postalCode" value={postalCode} onChange={(e) => setPostalCode(e.target.value.replace(/\D/g, ''))} onBlur={calculateDeliveryFee} placeholder="e.g., 50470" className="pl-12 text-base" maxLength={5} />
+                    <Input id="postalCode" value={postalCode} onChange={(e) => setPostalCode(e.target.value.replace(/\D/g, ''))} placeholder="e.g., 50470" className="pl-12 text-base" maxLength={5} />
                   </div>
-                  {feeStatus === 'calculating' && (
-                    <p className="text-sm text-gray-600 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />Calculating delivery fee…</p>
-                  )}
-                  {feeStatus === 'distance' && (
-                    <p className="text-sm text-green-600">✓ Delivery charge: RM {deliveryCharge.toFixed(2)} ({deliveryDistanceKm?.toFixed(1)} km away)</p>
-                  )}
-                  {feeStatus === 'postal-fallback' && (
-                    <p className="text-sm text-amber-600">✓ Delivery charge (estimated): RM {deliveryCharge.toFixed(2)}</p>
-                  )}
-                  {feeStatus === 'out-of-range' && (
-                    <p className="text-sm text-red-600">Sorry, this address is beyond our {MAX_DELIVERY_KM}km delivery radius{deliveryDistanceKm ? ` (${deliveryDistanceKm.toFixed(1)} km away)` : ''}. Please choose Pickup instead.</p>
-                  )}
                 </div>
               </div>
             )}
@@ -365,7 +283,7 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="phone" className="text-base">Contact Phone *</Label>
-              <Input id="phone" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="+60 12-345 6789" className="h-12 text-base" />
+              <Input id="phone" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="60123456789" className="h-12 text-base" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="instructions" className="text-base">Special Instructions (Optional)</Label>
@@ -393,14 +311,14 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
                 <span className="text-gray-700">Subtotal:</span>
                 <span className="font-semibold">RM {subtotal.toFixed(2)}</span>
               </div>
-              <div className="flex items-center justify-between text-base">
-                <span className="text-gray-700 flex items-center gap-2"><Truck className="w-4 h-4" />Delivery Charge:</span>
-                <span className="font-semibold">
-                  {feeStatus === 'calculating' ? 'Calculating…' : deliveryCharge === 0 ? 'FREE' : `RM ${deliveryCharge.toFixed(2)}`}
-                </span>
-              </div>
+              {deliveryMethod === 'delivery' && (
+                <div className="flex items-center justify-between text-base">
+                  <span className="text-gray-700 flex items-center gap-2"><Truck className="w-4 h-4" />Delivery Fee:</span>
+                  <span className="font-semibold text-gray-600">Confirmed via WhatsApp</span>
+                </div>
+              )}
               <div className="flex items-center justify-between text-xl pt-3 border-t">
-                <span className="font-bold text-gray-900">Total:</span>
+                <span className="font-bold text-gray-900">Total{deliveryMethod === 'delivery' ? ' (excl. delivery)' : ''}:</span>
                 <span className="font-bold text-orange-600">RM {total.toFixed(2)}</span>
               </div>
             </div>
@@ -409,9 +327,7 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
               <div>
                 <Label className="text-base font-semibold">Payment Method *</Label>
                 <div className="space-y-3 mt-3">
-                  {paymentOptions
-                    .filter(({ value }) => !(value === 'cash' && deliveryMethod === 'delivery'))
-                    .map(({ value, Icon, label, desc }) => (
+                  {paymentOptions.map(({ value, Icon, label, desc }) => (
                     <div
                       key={value}
                       onClick={() => setPaymentMethod(value)}
@@ -448,9 +364,9 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
                 </div>
               )}
               <Button size="lg" onClick={handlePlaceOrder} className="w-full brand-button h-14 text-lg">
-                {paymentMethod === 'tng' || paymentMethod === 'fpx' ? 'Proceed to Online Payment' : 'Review My Order →'}
+                Proceed to Online Payment
               </Button>
-              <p className="text-sm text-center text-gray-600">Orders require admin approval before processing</p>
+              <p className="text-sm text-center text-gray-600">Your order is confirmed immediately once payment succeeds</p>
             </div>
           </CardContent>
         </Card>

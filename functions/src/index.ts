@@ -117,64 +117,21 @@ export const toyyibpayCallback = onRequest(
   }
 );
 
-// Kitchen origin — No 42, Jalan USJ 2/5A, 47600 Subang Jaya, Selangor (geocoded once via Nominatim)
-const DELIVERY_ORIGIN = { lat: 3.0622477, lon: 101.5833748 };
-
-// The ORS key stays server-side (never sent to the browser) so it can't be scraped
-// out of the frontend bundle and used to burn through the free daily quota.
-export const calculateDeliveryDistance = onCall(
-  { region: 'asia-southeast1' },
-  async (request) => {
-    if (!request.auth) {
-      throw new HttpsError('unauthenticated', 'Must be signed in to calculate delivery distance.');
-    }
-
-    const { lat, lon } = request.data as { lat: number; lon: number };
-    if (typeof lat !== 'number' || typeof lon !== 'number') {
-      throw new HttpsError('invalid-argument', 'Missing destination coordinates.');
-    }
-
-    const apiKey = process.env.ORS_API_KEY;
-    if (!apiKey) {
-      throw new HttpsError('failed-precondition', 'Delivery distance service is not configured. Set ORS_API_KEY in functions/.env and redeploy.');
-    }
-
-    const url = new URL('https://api.openrouteservice.org/v2/directions/driving-car');
-    url.searchParams.set('api_key', apiKey);
-    // openrouteservice expects "lon,lat" order
-    url.searchParams.set('start', `${DELIVERY_ORIGIN.lon},${DELIVERY_ORIGIN.lat}`);
-    url.searchParams.set('end', `${lon},${lat}`);
-
-    const response = await fetch(url.toString());
-    if (!response.ok) {
-      throw new HttpsError('internal', 'Could not calculate delivery distance.');
-    }
-
-    const data = (await response.json()) as any;
-    const meters = data?.features?.[0]?.properties?.summary?.distance;
-    if (typeof meters !== 'number') {
-      throw new HttpsError('internal', 'Unexpected response from routing service.');
-    }
-
-    return { distanceKm: meters / 1000 };
-  }
-);
-
 // ─── Order submission ─────────────────────────────────────────────────────────
 //
-// The sole place an order is ever created. Both the cash-on-pickup flow and the
-// post-payment ToyyibPay return flow call this instead of writing to Firestore
-// directly — firestore.rules blocks direct client creates entirely (see
-// firestore.rules), so this is now the only path. That closes two gaps a prior
-// review found: (1) price/product data was previously taken as-is from the
-// client (cart prices, product names) with nothing re-checking them against the
-// real catalog; (2) a paid order was previously created just because the
-// customer's browser landed on the return URL with a certain query string,
-// which anyone could type in by hand. Payment is now only trusted once
-// toyyibpayCallback (a server-to-server call from ToyyibPay itself) has
-// recorded a matching paymentConfirmations doc.
-
-const VALID_DELIVERY_CHARGES = [0, 5, 8, 12, 16, 20]; // mirrors src/app/utils/delivery.ts's tiers
+// The sole place an order is ever created — the post-payment ToyyibPay return
+// flow calls this instead of writing to Firestore directly; firestore.rules
+// blocks direct client creates entirely. That closes two gaps a prior review
+// found: (1) price/product data was previously taken as-is from the client
+// (cart prices, product names) with nothing re-checking them against the real
+// catalog; (2) a paid order was previously created just because the customer's
+// browser landed on the return URL with a certain query string, which anyone
+// could type in by hand. Payment is only trusted once toyyibpayCallback (a
+// server-to-server call from ToyyibPay itself) has recorded a matching
+// paymentConfirmations doc. Cash was removed entirely on the admin's request:
+// every order is paid before it exists, so there is no approval step, and the
+// delivery (Grab) fee is arranged separately over WhatsApp rather than
+// collected with the order.
 
 function getDateKey(date: Date = new Date()): string {
   const YY = String(date.getFullYear()).slice(-2);
@@ -199,14 +156,13 @@ interface SubmitOrderRequest {
   deliveryMethod: 'pickup' | 'delivery';
   deliveryAddress?: string;
   postalCode?: string;
-  deliveryCharge: number;
   contactPhone: string;
   specialInstructions?: string;
-  paymentMethod: 'cash' | 'tng' | 'fpx';
+  paymentMethod: 'tng' | 'fpx';
   paymentNote?: string;
   deliveryDate: string;
   customerName: string;
-  billCode?: string; // required when paymentMethod is 'tng' or 'fpx'
+  billCode: string;
 }
 
 export const submitOrder = onCall(
@@ -217,7 +173,7 @@ export const submitOrder = onCall(
     }
     const customerId = request.auth.uid;
     const data = request.data as SubmitOrderRequest;
-    const { clientRequestId, items, deliveryMethod, deliveryCharge, paymentMethod } = data;
+    const { clientRequestId, items, deliveryMethod, paymentMethod } = data;
 
     if (!clientRequestId || typeof clientRequestId !== 'string') {
       throw new HttpsError('invalid-argument', 'Missing request id.');
@@ -231,12 +187,9 @@ export const submitOrder = onCall(
     if (deliveryMethod === 'delivery' && !data.deliveryAddress) {
       throw new HttpsError('invalid-argument', 'Missing delivery address.');
     }
-    const chargeIsValidForMethod = deliveryMethod === 'pickup' ? deliveryCharge === 0 : deliveryCharge > 0;
-    if (!VALID_DELIVERY_CHARGES.includes(deliveryCharge) || !chargeIsValidForMethod) {
-      throw new HttpsError('invalid-argument', 'Invalid delivery charge.');
-    }
-    if (paymentMethod === 'cash' && deliveryMethod === 'delivery') {
-      throw new HttpsError('invalid-argument', 'Cash is only available for pickup.');
+    // Cash was removed — every order must arrive through the online payment flow.
+    if (paymentMethod !== 'tng' && paymentMethod !== 'fpx') {
+      throw new HttpsError('invalid-argument', 'Invalid payment method.');
     }
     if (!data.contactPhone || !data.deliveryDate) {
       throw new HttpsError('invalid-argument', 'Missing required order details.');
@@ -279,84 +232,73 @@ export const submitOrder = onCall(
       };
     }));
 
+    // The delivery (Grab) fee is arranged over WhatsApp after the order, so the
+    // amount paid online is always exactly the items subtotal.
     const subtotal = resolvedItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
-    const total = subtotal + deliveryCharge;
+    const deliveryCharge = 0;
+    const total = subtotal;
 
-    let paymentStatus: 'paid' | null = null;
-    let transactionId: string | null = null;
-    let status = 'Pending Approval';
-
-    if (paymentMethod === 'tng' || paymentMethod === 'fpx') {
-      if (!data.billCode) {
-        throw new HttpsError('invalid-argument', 'Missing payment reference.');
-      }
-
-      // A second dedup pass keyed on the payment itself — covers a reload that
-      // generates a new clientRequestId but points at the same already-paid bill.
-      const existingByBill = await db.collection('orders')
-        .where('customerId', '==', customerId)
-        .where('billCode', '==', data.billCode)
-        .limit(1).get();
-      if (!existingByBill.empty) {
-        const existing = existingByBill.docs[0];
-        return { orderId: existing.id, total: existing.data().total };
-      }
-
-      const confirmationSnap = await db.collection('paymentConfirmations').doc(data.billCode).get();
-      if (!confirmationSnap.exists) {
-        throw new HttpsError('failed-precondition', 'Payment has not been confirmed yet. Please wait a moment and try again.');
-      }
-      const confirmation = confirmationSnap.data() as any;
-      if (confirmation.status !== '1') {
-        throw new HttpsError('failed-precondition', 'Payment was not successful.');
-      }
-      const expectedCents = Math.round(total * 100);
-      if (confirmation.amount !== expectedCents) {
-        logger.error('ToyyibPay paid amount does not match the recomputed order total', {
-          billCode: data.billCode, expectedCents, paidAmount: confirmation.amount,
-        });
-        throw new HttpsError('failed-precondition', 'Paid amount does not match the order total.');
-      }
-
-      paymentStatus = 'paid';
-      transactionId = confirmation.refno || null;
-      status = 'Order Received';
+    if (!data.billCode) {
+      throw new HttpsError('invalid-argument', 'Missing payment reference.');
     }
+
+    // A second dedup pass keyed on the payment itself — covers a reload that
+    // generates a new clientRequestId but points at the same already-paid bill.
+    const existingByBill = await db.collection('orders')
+      .where('customerId', '==', customerId)
+      .where('billCode', '==', data.billCode)
+      .limit(1).get();
+    if (!existingByBill.empty) {
+      const existing = existingByBill.docs[0];
+      return { orderId: existing.id, total: existing.data().total };
+    }
+
+    const confirmationSnap = await db.collection('paymentConfirmations').doc(data.billCode).get();
+    if (!confirmationSnap.exists) {
+      throw new HttpsError('failed-precondition', 'Payment has not been confirmed yet. Please wait a moment and try again.');
+    }
+    const confirmation = confirmationSnap.data() as any;
+    if (confirmation.status !== '1') {
+      throw new HttpsError('failed-precondition', 'Payment was not successful.');
+    }
+    const expectedCents = Math.round(total * 100);
+    if (confirmation.amount !== expectedCents) {
+      logger.error('ToyyibPay paid amount does not match the recomputed order total', {
+        billCode: data.billCode, expectedCents, paidAmount: confirmation.amount,
+      });
+      throw new HttpsError('failed-precondition', 'Paid amount does not match the order total.');
+    }
+
+    const paymentStatus = 'paid';
+    const transactionId: string | null = confirmation.refno || null;
+    const status = 'Order Received';
 
     const orderId = await db.runTransaction(async (tx) => {
       const newOrderRef = db.collection('orders').doc();
 
       // Capacity is re-checked inside the same transaction that increments the
       // count, so two orders racing for the last slot can no longer both slip
-      // through (the checkout-time pre-check is only advisory). A paid online
-      // order is never refused here — the money is already captured by this
-      // point and checkout pre-checked capacity before payment started — so it
-      // is created regardless and the (rare) overbooking is logged for the
-      // admin to resolve.
+      // through (the checkout-time pre-check is only advisory). A paid order is
+      // never refused here — the money is already captured by this point and
+      // checkout pre-checked capacity before payment started — so it is created
+      // regardless and the (rare) overbooking is logged for the admin to resolve.
       const countRef = db.collection('orderCounts').doc(data.deliveryDate);
       const limitSnap = await tx.get(db.collection('dailyLimits').doc(data.deliveryDate));
       const countSnap = await tx.get(countRef);
       const limit = limitSnap.exists ? Number((limitSnap.data() as any).limit) || 0 : 0;
       const booked = countSnap.exists ? Math.max(0, Number((countSnap.data() as any).count) || 0) : 0;
       if (limit > 0 && booked >= limit) {
-        if (paymentStatus !== 'paid') {
-          throw new HttpsError('failed-precondition', 'The selected date is fully booked. Please choose another date.');
-        }
         logger.warn('Paid order accepted over the daily capacity limit', {
           deliveryDate: data.deliveryDate, limit, booked,
         });
       }
 
-      let finalizedNumber: string | null = null;
-
-      if (status === 'Order Received') {
-        const dateKey = getDateKey();
-        const counterRef = db.collection('counters').doc(`orders-${dateKey}`);
-        const counterSnap = await tx.get(counterRef);
-        const next = (counterSnap.exists ? (counterSnap.data() as any).count : 0) + 1;
-        tx.set(counterRef, { count: next });
-        finalizedNumber = generateFinalOrderNumber(next);
-      }
+      const dateKey = getDateKey();
+      const counterRef = db.collection('counters').doc(`orders-${dateKey}`);
+      const counterSnap = await tx.get(counterRef);
+      const next = (counterSnap.exists ? (counterSnap.data() as any).count : 0) + 1;
+      tx.set(counterRef, { count: next });
+      const finalizedNumber = generateFinalOrderNumber(next);
 
       tx.set(newOrderRef, {
         id: newOrderRef.id,
