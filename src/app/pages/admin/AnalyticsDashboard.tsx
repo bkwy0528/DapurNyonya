@@ -57,7 +57,9 @@ export default function AnalyticsDashboard({ user: _user }: AnalyticsDashboardPr
 
     const totalRevenue = revenueOrders.reduce((sum: number, o: any) => sum + (o.total || 0), 0);
     const totalOrders = orders.length;
-    const pendingOrders = orders.filter((o: any) => o.status === 'Pending Approval').length;
+    // Approval no longer exists (orders arrive paid) — count orders still being
+    // worked on instead.
+    const pendingOrders = orders.filter((o: any) => ['Order Received', 'In Preparation'].includes(o.status)).length;
     const completedOrders = orders.filter((o: any) => o.status === 'Delivered').length;
 
     // Keyed by sortable "YYYY-MM" so months chart in chronological order
@@ -176,11 +178,11 @@ export default function AnalyticsDashboard({ user: _user }: AnalyticsDashboardPr
                   <Calendar className="w-6 h-6 text-white" />
                 </div>
                 <div className="text-right">
-                  <p className="text-sm text-gray-600">Pending Orders</p>
+                  <p className="text-sm text-gray-600">In Progress</p>
                   <p className="text-2xl font-bold text-gray-900">{analytics.pendingOrders}</p>
                 </div>
               </div>
-              <p className="text-sm text-gray-600">Awaiting approval</p>
+              <p className="text-sm text-gray-600">Paid orders being prepared</p>
             </CardContent>
           </Card>
 
@@ -246,14 +248,18 @@ export default function AnalyticsDashboard({ user: _user }: AnalyticsDashboardPr
                 <CardTitle className="text-xl">Order Status Distribution</CardTitle>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
+                {/* Slice labels only carry the count — the long status names
+                    ("Ready for Pickup: 3") overflowed the chart on phone
+                    screens, so names live in the legend below instead. */}
+                <ResponsiveContainer width="100%" height={340}>
                   <PieChart>
-                    <Pie data={analytics.statusBreakdown} cx="50%" cy="50%" labelLine={false} label={(entry) => `${entry.name}: ${entry.value}`} outerRadius={100} fill="#8884d8" dataKey="value">
+                    <Pie data={analytics.statusBreakdown} cx="50%" cy="50%" labelLine={false} label={(entry) => `${entry.value}`} outerRadius={90} fill="#8884d8" dataKey="value">
                       {analytics.statusBreakdown.map((_, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
                     <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid #ccc' }} />
+                    <Legend wrapperStyle={{ fontSize: '13px' }} />
                   </PieChart>
                 </ResponsiveContainer>
               </CardContent>

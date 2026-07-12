@@ -67,11 +67,17 @@ export default function OrderReceiptPage({ user }: OrderReceiptPageProps) {
           brand header legible even when the browser's "background graphics"
           print option is off (white text on a dropped background otherwise
           prints invisible). Compact padding + break-inside keep the receipt on
-          a single A4 page whenever possible. */}
+          a single A4 page whenever possible.
+
+          The html font-size shrink is for mobile Safari/Chrome: their print
+          pipeline renders slightly larger than desktop, which pushed the last
+          receipt section onto a second page on iPhone. Every Tailwind size here
+          is rem-based, so scaling the root shrinks the whole receipt uniformly. */}
       <style>{`@media print {
-        @page { size: A4; margin: 10mm; }
+        @page { size: A4; margin: 8mm; }
+        html { font-size: 13px; }
         .receipt-card { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        .receipt-card > div { break-inside: avoid; padding-top: 10px; padding-bottom: 10px; }
+        .receipt-card > div { break-inside: avoid; padding-top: 8px; padding-bottom: 8px; }
       }`}</style>
 
       {/* Action bar — hidden when printing */}
@@ -189,7 +195,13 @@ export default function OrderReceiptPage({ user }: OrderReceiptPageProps) {
               </div>
               <div className="flex justify-between text-gray-600">
                 <span>Delivery Charge</span>
-                <span>{order.deliveryCharge === 0 ? 'FREE' : `RM ${(order.deliveryCharge || 0).toFixed(2)}`}</span>
+                {/* Legacy orders carry a computed charge; new delivery orders
+                    settle the Grab fee separately over WhatsApp */}
+                <span>
+                  {(order.deliveryCharge || 0) > 0
+                    ? `RM ${order.deliveryCharge.toFixed(2)}`
+                    : order.deliveryMethod === 'delivery' ? 'Separate (Grab)' : 'FREE'}
+                </span>
               </div>
               <div className="flex justify-between items-baseline pt-2 border-t-4 border-double border-gray-900">
                 <span className="text-base font-bold text-gray-900 uppercase tracking-wide">Total</span>
@@ -269,7 +281,8 @@ export default function OrderReceiptPage({ user }: OrderReceiptPageProps) {
             <CheckCircle2 className="w-10 h-10 text-orange-400 mx-auto mb-3" />
             <p className="text-lg font-bold text-gray-800">Thank you for your order!</p>
             <p className="text-sm text-gray-500 mt-1">
-              We look forward to preparing your items. You will be notified once your order is confirmed.
+              We look forward to preparing your items.
+              {order.deliveryMethod === 'delivery' && ' We will contact you on WhatsApp to arrange the Grab delivery fee.'}
             </p>
             <div className="mt-6 pt-4 border-t border-gray-100 space-y-1">
               <p className="text-xs text-gray-400">
