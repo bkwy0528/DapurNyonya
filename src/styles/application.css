@@ -206,3 +206,21 @@
     @apply h-8 w-8 shrink-0;
   }
 }
+
+/* Printing (receipts): only the page content itself should reach paper — the
+   fixed app header (with its expensive backdrop-blur), install prompt, and
+   toasts would otherwise overlay the printed output. Unlayered on purpose so
+   these rules beat the @layer components definitions above. */
+@media print {
+  .app-header,
+  .install-prompt,
+  [data-sonner-toaster] {
+    display: none !important;
+  }
+
+  .app-shell {
+    min-height: 0;
+    background: white;
+    padding-top: 0;
+  }
+}

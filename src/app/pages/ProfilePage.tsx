@@ -125,7 +125,7 @@ export default function ProfilePage({ user, onLogout, onProfileUpdate }: Profile
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="address" className="text-base">Address (Optional)</Label>
+              <Label htmlFor="address" className="text-base">Address</Label>
               <Textarea id="address" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Enter your delivery address" className="min-h-24 text-base" />
             </div>
 

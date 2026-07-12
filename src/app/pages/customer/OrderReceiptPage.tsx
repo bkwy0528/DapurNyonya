@@ -63,8 +63,16 @@ export default function OrderReceiptPage({ user }: OrderReceiptPageProps) {
 
   return (
     <>
-      {/* Print-only page sizing */}
-      <style>{`@media print { @page { size: A4; margin: 12mm; } }`}</style>
+      {/* Print-only page sizing + receipt fitting. print-color-adjust keeps the
+          brand header legible even when the browser's "background graphics"
+          print option is off (white text on a dropped background otherwise
+          prints invisible). Compact padding + break-inside keep the receipt on
+          a single A4 page whenever possible. */}
+      <style>{`@media print {
+        @page { size: A4; margin: 10mm; }
+        .receipt-card { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .receipt-card > div { break-inside: avoid; padding-top: 10px; padding-bottom: 10px; }
+      }`}</style>
 
       {/* Action bar — hidden when printing */}
       <div className="print:hidden sticky top-0 z-10 bg-white border-b shadow-sm px-4 py-3 flex items-center gap-3">
@@ -77,8 +85,8 @@ export default function OrderReceiptPage({ user }: OrderReceiptPageProps) {
         </Button>
       </div>
 
-      <div className="min-h-screen bg-gray-100 py-8 px-4 print:bg-white print:py-0 print:px-0">
-        <div className="max-w-xl mx-auto bg-white shadow-xl rounded-2xl overflow-hidden print:shadow-none print:rounded-none">
+      <div className="min-h-screen bg-gray-100 py-8 px-4 print:min-h-0 print:bg-white print:py-0 print:px-0">
+        <div className="receipt-card max-w-xl mx-auto bg-white shadow-xl rounded-2xl overflow-hidden print:max-w-none print:shadow-none print:rounded-none">
 
           {/* ── Brand header ────────────────────────────────────────────── */}
           <div className="bg-gradient-to-r from-orange-500 to-amber-500 px-8 py-7">
