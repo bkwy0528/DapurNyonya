@@ -17,7 +17,7 @@ export default function ProductCard({ product, orderTo, orderLabel = 'Order This
   return (
     <Card className="overflow-hidden hover:shadow-lg transition-shadow">
       <div className="flex flex-col sm:flex-row">
-        <div className="sm:w-48 h-48 sm:h-auto overflow-hidden flex-shrink-0">
+        <div className="w-full sm:w-64 aspect-[4/3] sm:self-start overflow-hidden flex-shrink-0 bg-gray-100">
           <img src={product.image} alt={product.name} onError={onImageError} className="w-full h-full object-cover" />
         </div>
         <div className="flex-1 p-6">
@@ -27,7 +27,7 @@ export default function ProductCard({ product, orderTo, orderLabel = 'Order This
               <p className="text-gray-600">{product.description}</p>
             </div>
             {product.available && (
-              <Badge className="status-badge--available ml-3">Available</Badge>
+              <Badge className="status-badge--available ml-3">Pre-Order</Badge>
             )}
           </div>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mt-4 gap-3">

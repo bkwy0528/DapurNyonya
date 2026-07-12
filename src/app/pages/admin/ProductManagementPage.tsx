@@ -8,12 +8,13 @@ import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../../components/ui/dialog';
 import { Switch } from '../../components/ui/switch';
-import { ArrowLeft, Plus, Edit, Trash2, Upload, X, Wheat } from 'lucide-react';
+import { ArrowLeft, Crop, Plus, Edit, Trash2, Upload, X, Wheat } from 'lucide-react';
 import { toast } from 'sonner';
 import { User } from '../../App';
 import { getOrders, getProducts, saveProduct, deleteProduct } from '../../utils/db';
-import { compressImage } from '../../utils/image';
+import { fileToDataUrl } from '../../utils/image';
 import { onImageError } from '../../utils/imageFallback';
+import ImageCropDialog from '../../components/ImageCropDialog';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
 interface ProductManagementPageProps {
@@ -35,6 +36,9 @@ interface Product {
   unit: string;
   prepDays: number;
   available: boolean;
+  // Exempt from the bulk-order minimum (e.g. bottled items) — small quantities
+  // of this product alone may still pick any collection date at checkout
+  bulkExempt?: boolean;
   ingredients?: ProductIngredient[];
 }
 
@@ -46,6 +50,7 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [outstandingUnits, setOutstandingUnits] = useState<number | null>(null);
   const [imagePreview, setImagePreview] = useState<string>('');
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
   const [duplicateNameWarning, setDuplicateNameWarning] = useState(false);
 
   // When the delete dialog opens, check whether the product still appears in
@@ -78,6 +83,7 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
     unit: '',
     prepDays: '3',
     available: true,
+    bulkExempt: false,
   });
   const [ingredients, setIngredients] = useState<ProductIngredient[]>([]);
 
@@ -85,18 +91,25 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
     getProducts().then(setProducts).finally(() => setLoading(false));
   }, []);
 
-  // Photos are resized/compressed before storing — Firestore documents cap at
-  // 1 MiB, so raw camera photos saved as base64 would silently fail to write
+  // Selecting a photo opens the crop dialog first; the cropped result is
+  // resized/compressed before storing — Firestore documents cap at 1 MiB, so
+  // raw camera photos saved as base64 would silently fail to write
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    // Allow picking the same file again after cancelling the crop
+    e.target.value = '';
     if (!file) return;
     try {
-      const compressed = await compressImage(file);
-      setFormData(prev => ({ ...prev, image: compressed }));
-      setImagePreview(compressed);
+      setCropSrc(await fileToDataUrl(file));
     } catch (err: any) {
       toast.error(err.message || 'Could not process the image. Please try another photo.');
     }
+  };
+
+  const handleCropConfirm = (cropped: string) => {
+    setFormData(prev => ({ ...prev, image: cropped }));
+    setImagePreview(cropped);
+    setCropSrc(null);
   };
 
   const addIngredientRow = () => setIngredients(prev => [...prev, { name: '', quantity: 0, unit: 'g' }]);
@@ -169,6 +182,7 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
       unit: product.unit,
       prepDays: String(product.prepDays || 3),
       available: product.available,
+      bulkExempt: product.bulkExempt ?? false,
     });
     setIngredients(product.ingredients || []);
     setImagePreview(product.image);
@@ -184,7 +198,7 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
   };
 
   const resetForm = () => {
-    setFormData({ name: '', description: '', price: '', image: '', unit: '', prepDays: '3', available: true });
+    setFormData({ name: '', description: '', price: '', image: '', unit: '', prepDays: '3', available: true, bulkExempt: false });
     setIngredients([]);
     setImagePreview('');
     setEditingProduct(null);
@@ -249,8 +263,14 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
                 <Label>Product Image *</Label>
                 <div className="space-y-3">
                   {imagePreview && (
-                    <div className="relative w-full h-48 rounded-lg overflow-hidden bg-gray-100">
+                    <div className="relative w-full aspect-[4/3] rounded-lg overflow-hidden bg-gray-100">
                       <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                      {/* Re-cropping works from the stored (already-cropped) image, so it can zoom in further but not recover cut-off edges */}
+                      {imagePreview.startsWith('data:') && (
+                        <Button type="button" variant="secondary" size="sm" className="absolute bottom-2 right-2 shadow" onClick={() => setCropSrc(imagePreview)}>
+                          <Crop className="w-4 h-4 mr-1" />Adjust
+                        </Button>
+                      )}
                       <Button variant="destructive" size="sm" className="absolute top-2 right-2" onClick={() => { setImagePreview(''); setFormData(prev => ({ ...prev, image: '' })); }}>
                         <X className="w-4 h-4" />
                       </Button>
@@ -272,36 +292,56 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
               </div>
 
               <div className="space-y-3 p-4 bg-gray-50 rounded-lg border">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="flex items-center gap-2"><Wheat className="w-4 h-4 text-orange-600" />Ingredients per {formData.unit || 'unit'}</Label>
-                    <p className="text-xs text-gray-500 mt-1">Used by Ingredient Planning to calculate shopping needs from upcoming orders</p>
-                  </div>
-                  <Button type="button" variant="outline" size="sm" onClick={addIngredientRow}>
-                    <Plus className="w-4 h-4 mr-1" />Add
-                  </Button>
+                <div>
+                  <Label className="flex items-center gap-2"><Wheat className="w-4 h-4 text-orange-600" />Ingredients per {formData.unit || 'unit'}</Label>
+                  <p className="text-xs text-gray-500 mt-1">Used by Ingredient Planning to calculate shopping needs from upcoming orders</p>
                 </div>
                 {ingredients.length === 0 ? (
                   <p className="text-sm text-gray-500">No ingredients added yet.</p>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {ingredients.map((ing, index) => (
-                      <div key={index} className="flex gap-2 items-center">
-                        <Input value={ing.name} onChange={(e) => updateIngredientRow(index, 'name', e.target.value)} placeholder="e.g. Flour" className="flex-1 h-11" />
-                        <Input type="number" value={ing.quantity || ''} onChange={(e) => updateIngredientRow(index, 'quantity', e.target.value)} placeholder="Qty" min="0" step="0.1" className="w-24 h-11 text-right" />
-                        <Input value={ing.unit} onChange={(e) => updateIngredientRow(index, 'unit', e.target.value)} placeholder="g / pieces" className="w-28 h-11" />
-                        <Button type="button" variant="ghost" size="sm" onClick={() => removeIngredientRow(index)} className="text-red-600 hover:bg-red-50 shrink-0">
-                          <X className="w-4 h-4" />
-                        </Button>
+                      <div key={index} className="bg-white border border-gray-200 rounded-lg p-3 space-y-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <Label htmlFor={`ing-name-${index}`} className="text-sm text-gray-600">Ingredient {index + 1}</Label>
+                          <Button type="button" variant="ghost" size="sm" onClick={() => removeIngredientRow(index)} className="h-8 px-2 text-red-600 hover:bg-red-50">
+                            <X className="w-4 h-4 mr-1" />Remove
+                          </Button>
+                        </div>
+                        <Input id={`ing-name-${index}`} value={ing.name} onChange={(e) => updateIngredientRow(index, 'name', e.target.value)} placeholder="e.g. Glutinous rice" className="h-12 text-base" />
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <Label htmlFor={`ing-qty-${index}`} className="text-sm text-gray-600">Amount</Label>
+                            <Input id={`ing-qty-${index}`} type="number" inputMode="decimal" value={ing.quantity || ''} onChange={(e) => updateIngredientRow(index, 'quantity', e.target.value)} placeholder="e.g. 50" min="0" step="0.1" className="h-12 text-base" />
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor={`ing-unit-${index}`} className="text-sm text-gray-600">Unit</Label>
+                            <Input id={`ing-unit-${index}`} value={ing.unit} onChange={(e) => updateIngredientRow(index, 'unit', e.target.value)} placeholder="g / ml / pieces" className="h-12 text-base" />
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>
                 )}
+                <Button type="button" variant="outline" onClick={addIngredientRow} className="w-full h-12 border-dashed border-2 text-gray-700">
+                  <Plus className="w-4 h-4 mr-2" />Add Ingredient
+                </Button>
               </div>
 
               <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                 <Label htmlFor="available">Product Available</Label>
                 <Switch id="available" checked={formData.available} onCheckedChange={(checked) => setFormData(prev => ({ ...prev, available: checked }))} />
+              </div>
+
+              <div className="flex items-center justify-between gap-4 p-4 bg-gray-50 rounded-lg">
+                <div className="space-y-1">
+                  <Label htmlFor="bulkExempt">No Minimum Quantity</Label>
+                  <p className="text-xs text-gray-500">
+                    For pre-packed items (e.g. a bottle of kueh tarts). Small orders of this product can pick any
+                    collection date instead of the fixed days set in Business Settings.
+                  </p>
+                </div>
+                <Switch id="bulkExempt" checked={formData.bulkExempt} onCheckedChange={(checked) => setFormData(prev => ({ ...prev, bulkExempt: checked }))} />
               </div>
 
               {duplicateNameWarning && (
@@ -322,7 +362,7 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
             <Card key={product.id}>
               <CardContent className="p-4 sm:p-6">
                 <div className="flex flex-col md:flex-row gap-6">
-                  <div className="w-full md:w-48 h-48 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
+                  <div className="w-full md:w-56 aspect-[4/3] rounded-lg overflow-hidden bg-gray-100 flex-shrink-0 md:self-start">
                     {product.image ? (
                       <img src={product.image} alt={product.name} onError={onImageError} className="w-full h-full object-cover" />
                     ) : (
@@ -352,6 +392,10 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
                         <p className="text-sm text-gray-600">Preparation</p>
                         <p className="font-semibold text-gray-900">{product.prepDays || 3} day(s)</p>
                       </div>
+                      <div>
+                        <p className="text-sm text-gray-600">Ordering</p>
+                        <p className="font-semibold text-gray-900">{product.bulkExempt ? 'No minimum quantity' : 'Counts toward bulk minimum'}</p>
+                      </div>
                     </div>
                     <div className="flex flex-col sm:flex-row gap-3 pt-2">
                       <Button variant="outline" onClick={() => handleEditProduct(product)} className="flex-1 border-2">
@@ -368,6 +412,8 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
           ))}
         </div>
       </div>
+
+      <ImageCropDialog imageSrc={cropSrc} onCancel={() => setCropSrc(null)} onConfirm={handleCropConfirm} />
 
       <Dialog open={productToDelete !== null} onOpenChange={(open) => !open && setProductToDelete(null)}>
         <DialogContent>

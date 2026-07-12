@@ -95,7 +95,7 @@ export default function CartPage({ user }: CartPageProps) {
               <CardContent className="p-4 sm:p-6">
                 <div className="flex flex-col sm:flex-row gap-4">
                   {/* Product Image */}
-                  <div className="w-full sm:w-32 h-32 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
+                  <div className="w-full sm:w-40 aspect-[4/3] sm:self-start rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
                     <img
                       src={item.image}
                       alt={item.name}

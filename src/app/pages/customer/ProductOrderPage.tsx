@@ -76,7 +76,7 @@ export default function ProductOrderPage({ user }: ProductOrderPageProps) {
 
       <div className="px-0 py-8 space-y-6">
         <Card className="overflow-hidden">
-          <div className="aspect-video w-full overflow-hidden">
+          <div className="aspect-[4/3] w-full overflow-hidden bg-gray-100">
             <img src={product.image} alt={product.name} onError={onImageError} className="w-full h-full object-cover" />
           </div>
           <CardContent className="p-6">

@@ -55,7 +55,7 @@ export default function ProductDetailPage({ user }: ProductDetailPageProps) {
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-6">
         <Card className="overflow-hidden">
-          <div className="aspect-video w-full overflow-hidden bg-gray-100">
+          <div className="aspect-[4/3] w-full overflow-hidden bg-gray-100">
             <img src={product.image} alt={product.name} onError={onImageError} className="w-full h-full object-cover" />
           </div>
 
@@ -64,7 +64,7 @@ export default function ProductDetailPage({ user }: ProductDetailPageProps) {
               <div className="flex flex-col sm:flex-row items-start justify-between mb-3 gap-3">
                 <h2 className="text-2xl sm:text-3xl font-semibold text-gray-900">{product.name}</h2>
                 {product.available && (
-                  <Badge className="status-badge--available">Available</Badge>
+                  <Badge className="status-badge--available">Pre-Order</Badge>
                 )}
               </div>
               <p className="text-gray-600 text-base sm:text-lg leading-relaxed">{product.description}</p>
@@ -91,7 +91,7 @@ export default function ProductDetailPage({ user }: ProductDetailPageProps) {
                 </div>
                 <div className="bg-gray-50 rounded-lg p-4">
                   <p className="text-sm text-gray-600 mb-1">Availability</p>
-                  <p className="font-semibold text-gray-900">{product.available ? 'In Stock' : 'Out of Stock'}</p>
+                  <p className="font-semibold text-gray-900">{product.available ? 'Pre-Order' : 'Currently Unavailable'}</p>
                 </div>
               </div>
             </div>
