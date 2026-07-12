@@ -56,10 +56,17 @@ export default function ProductOrderPage({ user }: ProductOrderPageProps) {
 
   const handleQuantityChange = (delta: number) => setQuantity(Math.max(1, quantity + delta));
 
+  // Typing beats pressing "+" twenty times for a bulk order. The field may be
+  // momentarily empty mid-edit (represented as 0); blur snaps it back to 1.
+  const handleQuantityInput = (raw: string) => {
+    const digits = raw.replace(/\D/g, '');
+    setQuantity(digits === '' ? 0 : Math.min(999, parseInt(digits, 10)));
+  };
+
   const totalPrice = product.price * quantity;
 
   const handleAddToCart = () => {
-    addToCart({ productId: product.id, name: product.name, price: product.price, quantity, image: product.image, unit: product.unit, prepDays: product.prepDays, notes });
+    addToCart({ productId: product.id, name: product.name, price: product.price, quantity: Math.max(1, quantity), image: product.image, unit: product.unit, prepDays: product.prepDays, notes });
     toast.success('Added to cart!');
     navigate('/customer/cart');
   };
@@ -96,10 +103,18 @@ export default function ProductOrderPage({ user }: ProductOrderPageProps) {
             <FormSection>
               <Label className="text-lg">Quantity</Label>
               <div className="flex items-center space-x-4">
-                <Button variant="outline" size="icon" onClick={() => handleQuantityChange(-1)} className="h-14 w-14 border-2"><Minus className="w-5 h-5" /></Button>
+                <Button variant="outline" size="icon" onClick={() => handleQuantityChange(-1)} disabled={quantity <= 1} className="h-14 w-14 border-2"><Minus className="w-5 h-5" /></Button>
                 <div className="flex-1 text-center">
-                  <div className="text-4xl font-bold text-gray-900">{quantity}</div>
-                  <div className="text-sm text-gray-500">{product.unit}</div>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    aria-label="Quantity"
+                    value={quantity === 0 ? '' : quantity}
+                    onChange={(e) => handleQuantityInput(e.target.value)}
+                    onBlur={() => { if (quantity < 1) setQuantity(1); }}
+                    className="w-full max-w-32 mx-auto block text-center text-4xl font-bold text-gray-900 border-2 border-gray-200 rounded-lg py-1 focus:border-orange-400 focus:outline-none"
+                  />
+                  <div className="text-sm text-gray-500 mt-1">{product.unit} — tap the number to type an amount</div>
                 </div>
                 <Button variant="outline" size="icon" onClick={() => handleQuantityChange(1)} className="h-14 w-14 border-2"><Plus className="w-5 h-5" /></Button>
               </div>

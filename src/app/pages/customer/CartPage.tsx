@@ -16,6 +16,23 @@ export default function CartPage({ user }: CartPageProps) {
   const navigate = useNavigate();
   const { cartItems, updateQuantity, removeFromCart, getCartTotal } = useCart();
   const [itemToRemove, setItemToRemove] = useState<{ productId: string; name: string } | null>(null);
+  // Lets the quantity field sit empty mid-edit — committing 0/empty straight to
+  // updateQuantity would silently remove the item while the customer is typing.
+  const [qtyDrafts, setQtyDrafts] = useState<Record<string, string>>({});
+
+  const handleQuantityTyped = (productId: string, raw: string) => {
+    const digits = raw.replace(/\D/g, '').slice(0, 3);
+    setQtyDrafts((prev) => ({ ...prev, [productId]: digits }));
+    const parsed = parseInt(digits, 10);
+    if (parsed >= 1) updateQuantity(productId, parsed);
+  };
+
+  const commitQuantity = (productId: string) => {
+    setQtyDrafts((prev) => {
+      const { [productId]: _, ...rest } = prev;
+      return rest;
+    });
+  };
   const homeLink = user ? '/customer/home' : '/';
 
   const confirmRemove = () => {
@@ -138,7 +155,15 @@ export default function CartPage({ user }: CartPageProps) {
                         >
                           <Minus className="w-4 h-4" />
                         </Button>
-                        <span className="text-lg font-semibold w-12 text-center">{item.quantity}</span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          aria-label={`Quantity of ${item.name}`}
+                          value={qtyDrafts[item.productId] ?? String(item.quantity)}
+                          onChange={(e) => handleQuantityTyped(item.productId, e.target.value)}
+                          onBlur={() => commitQuantity(item.productId)}
+                          className="w-16 h-10 text-lg font-semibold text-center border-2 border-gray-200 rounded-lg focus:border-orange-400 focus:outline-none"
+                        />
                         <Button
                           variant="outline"
                           size="sm"

@@ -28,7 +28,8 @@ describe('CartContext', () => {
     localStorage.setItem('cart', JSON.stringify([item({ quantity: 2 })]));
     const { result } = renderHook(() => useCart(), { wrapper });
     expect(result.current.cartItems).toHaveLength(1);
-    expect(result.current.getCartCount()).toBe(2);
+    // Count is distinct products, not units — 2 dumplings is still one item
+    expect(result.current.getCartCount()).toBe(1);
   });
 
   it('adds a new product as its own line', () => {
@@ -82,7 +83,8 @@ describe('CartContext', () => {
     act(() => result.current.addToCart(item({ productId: '1', price: 25, quantity: 2 })));
     act(() => result.current.addToCart(item({ productId: '2', price: 18, quantity: 1 })));
     expect(result.current.getCartTotal()).toBe(25 * 2 + 18);
-    expect(result.current.getCartCount()).toBe(3);
+    // 3 units across 2 distinct products — the badge shows 2
+    expect(result.current.getCartCount()).toBe(2);
   });
 
   it('persists every change to localStorage', () => {

@@ -101,8 +101,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
     return cartItems.reduce((total, item) => total + item.price * item.quantity, 0);
   };
 
+  // Distinct products, not total units — a single 19-unit item must show as
+  // "1" on the header badge, otherwise it reads like 19 different things.
   const getCartCount = () => {
-    return cartItems.reduce((count, item) => count + item.quantity, 0);
+    return cartItems.length;
   };
 
   return (
