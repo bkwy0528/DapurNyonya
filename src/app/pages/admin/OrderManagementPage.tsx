@@ -8,11 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from '../../components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
 
-import { ArrowLeft, CheckCircle, Eye, Check, X, Search, ChevronDown, ChevronUp, Truck } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Eye, Search, ChevronDown, ChevronUp, Truck } from 'lucide-react';
 import { toast } from 'sonner';
 import { User } from '../../App';
-import { generateFinalOrderNumber, getDateKey } from '../../utils/business';
-import { getOrders, updateOrderFields, updateOrderFieldsReleasingSlot, getNextDailyOrderSequence } from '../../utils/db';
+import { getOrders, updateOrderFields } from '../../utils/db';
 import { getStatusStyle } from '../../utils/statusStyles';
 import { onImageError } from '../../utils/imageFallback';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
@@ -25,13 +24,11 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [sortBy, setSortBy] = useState<'newest' | 'deliverySoonest' | 'deliveryLatest'>('newest');
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [adminNotes, setAdminNotes] = useState('');
-  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
-  const [rejectReason, setRejectReason] = useState('');
-  const [orderToReject, setOrderToReject] = useState<any>(null);
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
 
   useEffect(() => { loadOrders(); }, []);
@@ -59,25 +56,29 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
         || (o.id || '').toLowerCase().includes(term)
       );
     }
-    return result;
-  }, [orders, statusFilter, searchTerm]);
+    // "Soonest" puts the next collection/delivery at the top so the admin sees
+    // what needs preparing first; orders without a date sink to the bottom.
+    // deliveryDate is a YYYY-MM-DD string, so plain string comparison sorts it.
+    if (sortBy === 'deliverySoonest' || sortBy === 'deliveryLatest') {
+      result = [...result].sort((a, b) => {
+        if (!a.deliveryDate) return 1;
+        if (!b.deliveryDate) return -1;
+        return sortBy === 'deliverySoonest'
+          ? a.deliveryDate.localeCompare(b.deliveryDate)
+          : b.deliveryDate.localeCompare(a.deliveryDate);
+      });
+    }
+    return result; // 'newest' keeps loadOrders' placed-date ordering
+  }, [orders, statusFilter, searchTerm, sortBy]);
 
+  // Orders arrive already paid and numbered (submitOrder assigns the
+  // finalized number server-side), so status moves only forward through the
+  // fulfilment steps — there is no approve/reject step anymore.
   const updateStatus = async (orderId: string, newStatus: string) => {
-    // The finalizedNumber "already assigned" check below reads stale client
-    // state, so a rapid double-click on Approve could burn an extra daily
-    // sequence number — block re-entry while an update is in flight.
     if (updatingOrderId) return;
     setUpdatingOrderId(orderId);
     try {
-      const updates: Record<string, any> = { status: newStatus };
-      if (newStatus === 'Order Received') {
-        const order = orders.find(o => o.id === orderId);
-        if (order && !order.finalizedNumber) {
-          const sequence = await getNextDailyOrderSequence(getDateKey());
-          updates.finalizedNumber = generateFinalOrderNumber(sequence);
-        }
-      }
-      await updateOrderFields(orderId, updates);
+      await updateOrderFields(orderId, { status: newStatus });
       await loadOrders();
       toast.success('Order status updated!');
     } finally {
@@ -92,17 +93,6 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
     setSelectedOrder(null);
     setAdminNotes('');
   };
-
-  const rejectOrder = async (order: any) => {
-    // Rejecting frees up the booked slot on that delivery date
-    await updateOrderFieldsReleasingSlot(order.id, { status: 'Rejected', rejectReason }, order.deliveryDate);
-    await loadOrders();
-    toast.success('Order rejected!');
-    setRejectDialogOpen(false);
-    setRejectReason('');
-    setOrderToReject(null);
-  };
-
 
   const getOrderLabel = (order: any) => order.finalizedNumber || `Order #${order.id.slice(-6)}`;
 
@@ -136,19 +126,26 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
                 />
               </div>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full lg:w-64 h-12 text-base">
+                <SelectTrigger className="w-full lg:w-56 h-12 text-base">
                   <SelectValue placeholder="Select status" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Orders</SelectItem>
-                  <SelectItem value="Pending Approval">Pending Approval</SelectItem>
                   <SelectItem value="Order Received">Order Received</SelectItem>
                   <SelectItem value="In Preparation">In Preparation</SelectItem>
                   <SelectItem value="Ready for Pickup">Ready for Pickup</SelectItem>
                   <SelectItem value="Out for Delivery">Out for Delivery</SelectItem>
                   <SelectItem value="Delivered">Delivered</SelectItem>
-                  <SelectItem value="Rejected">Rejected</SelectItem>
-                  <SelectItem value="Cancelled">Cancelled</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
+                <SelectTrigger className="w-full lg:w-64 h-12 text-base" aria-label="Sort orders">
+                  <SelectValue placeholder="Sort orders" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="newest">Sort: Recently placed</SelectItem>
+                  <SelectItem value="deliverySoonest">Sort: Delivery date — soonest</SelectItem>
+                  <SelectItem value="deliveryLatest">Sort: Delivery date — latest</SelectItem>
                 </SelectContent>
               </Select>
               <Badge variant="outline" className="text-base px-4 py-2 shrink-0">{filteredOrders.length} orders</Badge>
@@ -210,7 +207,13 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-gray-700">Delivery Charge:</span>
-                    <span className="font-semibold">{order.deliveryCharge === 0 ? 'FREE' : `RM ${(order.deliveryCharge || 0).toFixed(2)}`}</span>
+                    {/* Legacy orders carry a computed charge; new delivery orders
+                        settle the Grab fee separately over WhatsApp */}
+                    <span className="font-semibold">
+                      {(order.deliveryCharge || 0) > 0
+                        ? `RM ${order.deliveryCharge.toFixed(2)}`
+                        : order.deliveryMethod === 'delivery' ? 'Grab fee via WhatsApp' : 'FREE'}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between pt-2 border-t border-blue-300">
                     <span className="text-lg font-bold text-gray-900">Total:</span>
@@ -277,16 +280,6 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
                   <div className="pt-4 border-t border-gray-200">
                     <h4 className="font-semibold text-gray-900 mb-3">Update Order Status:</h4>
                     <div className="flex flex-wrap gap-2">
-                      {order.status === 'Pending Approval' && (
-                        <>
-                          <Button onClick={() => updateStatus(order.id, 'Order Received')} disabled={updatingOrderId === order.id} className="success-button">
-                            <Check className="w-4 h-4 mr-2" />{updatingOrderId === order.id ? 'Approving…' : 'Approve Order'}
-                          </Button>
-                          <Button variant="destructive" onClick={() => { setOrderToReject(order); setRejectDialogOpen(true); }}>
-                            <X className="w-4 h-4 mr-2" />Reject Order
-                          </Button>
-                        </>
-                      )}
                       {order.status === 'Order Received' && (
                         <Button onClick={() => updateStatus(order.id, 'In Preparation')} className="brand-button">Start Preparation</Button>
                       )}
@@ -342,21 +335,6 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
         </DialogContent>
       </Dialog>
 
-      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Reject Order {orderToReject ? getOrderLabel(orderToReject) : ''}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-gray-600">Please provide a reason for rejecting this order:</p>
-            <Textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="e.g., Out of stock, Cannot meet delivery date..." className="min-h-32" />
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={() => { setRejectDialogOpen(false); setRejectReason(''); setOrderToReject(null); }} className="flex-1">Cancel</Button>
-              <Button variant="destructive" onClick={() => orderToReject && rejectOrder(orderToReject)} disabled={!rejectReason.trim()} className="flex-1">Reject Order</Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

@@ -32,7 +32,9 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
       const todayOrders = orders.filter((o: any) =>
         new Date(o.orderDate || o.createdAt || Date.now()).toDateString() === today
       );
-      const pending = orders.filter((o: any) => o.status === 'Pending Approval');
+      // Paid orders that still need to be prepared — approval no longer exists,
+      // so "what's on my plate" replaces the old Pending Approval count.
+      const inProgress = orders.filter((o: any) => ['Order Received', 'In Preparation'].includes(o.status));
       // Rejected/Cancelled orders need no production — excluded the same way
       // Production Schedule already excludes them, so the two counts agree.
       const upcoming = orders.filter((o: any) => {
@@ -49,7 +51,7 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
 
       setStats({
         totalOrdersToday: todayOrders.length,
-        pendingOrders: pending.length,
+        pendingOrders: inProgress.length,
         upcomingProduction: upcoming.length,
         totalRevenue: revenue,
       });
@@ -67,7 +69,7 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
 
   const statCards = [
     { title: 'Orders Today', value: stats.totalOrdersToday, icon: ShoppingCart, bgColor: 'bg-blue-50', textColor: 'text-blue-600' },
-    { title: 'Pending Approval', value: stats.pendingOrders, icon: Clock, bgColor: 'bg-yellow-50', textColor: 'text-yellow-600' },
+    { title: 'To Prepare', value: stats.pendingOrders, icon: Clock, bgColor: 'bg-yellow-50', textColor: 'text-yellow-600' },
     { title: 'Upcoming (7 days)', value: stats.upcomingProduction, icon: Calendar, bgColor: 'bg-orange-50', textColor: 'text-orange-600' },
     { title: 'Total Revenue', value: `RM ${stats.totalRevenue.toFixed(2)}`, icon: TrendingUp, bgColor: 'bg-green-50', textColor: 'text-green-600' },
   ];

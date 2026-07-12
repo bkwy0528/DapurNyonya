@@ -1,7 +1,7 @@
 import { db } from '../../firebase';
 import {
   collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
-  query, where, addDoc, runTransaction, writeBatch, increment,
+  query, where, addDoc,
 } from 'firebase/firestore';
 
 export const ADMIN_EMAILS = ['yikbryan0528work@gmail.com', 'ksl_joyce@yahoo.com'];
@@ -80,32 +80,9 @@ export async function updateOrderFields(id: string, updates: Record<string, any>
   await updateDoc(doc(db, 'orders', id), updates);
 }
 
-// For status changes that free up a booked slot (admin reject, customer cancel):
-// updates the order and decrements that date's counter atomically.
-export async function updateOrderFieldsReleasingSlot(id: string, updates: Record<string, any>, deliveryDate?: string): Promise<void> {
-  const batch = writeBatch(db);
-  batch.update(doc(db, 'orders', id), updates);
-  if (deliveryDate) {
-    batch.set(doc(db, 'orderCounts', deliveryDate), { count: increment(-1) }, { merge: true });
-  }
-  await batch.commit();
-}
-
 export async function getOrderCountForDate(date: string): Promise<number> {
   const snap = await getDoc(doc(db, 'orderCounts', date));
   return snap.exists() ? Math.max(0, (snap.data() as any).count || 0) : 0;
-}
-
-// Atomically returns 1, 2, 3... per dateKey (e.g. "260706") so concurrent
-// approvals never get the same finalized order number.
-export async function getNextDailyOrderSequence(dateKey: string): Promise<number> {
-  const counterRef = doc(db, 'counters', `orders-${dateKey}`);
-  return runTransaction(db, async (transaction) => {
-    const snap = await transaction.get(counterRef);
-    const next = (snap.exists() ? (snap.data() as any).count : 0) + 1;
-    transaction.set(counterRef, { count: next });
-    return next;
-  });
 }
 
 // ─── Settings ────────────────────────────────────────────────────────────────
