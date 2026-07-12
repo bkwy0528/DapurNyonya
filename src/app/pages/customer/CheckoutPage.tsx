@@ -9,12 +9,13 @@ import { Label } from '../../components/ui/label';
 import { RadioGroup, RadioGroupItem } from '../../components/ui/radio-group';
 import { Textarea } from '../../components/ui/textarea';
 import { ArrowLeft, MapPin, Truck, Home as HomeIcon, Calendar, Banknote, Smartphone, Building2, CheckCircle2, Loader2 } from 'lucide-react';
+import { Calendar as CalendarPicker } from '../../components/ui/calendar';
 import { useCart } from '../../context/CartContext';
-import { getMaxPrepDaysFromCart } from '../../utils/business';
+import { DEFAULT_ORDERING_RULES, getBulkOrderStatus, getMaxPrepDaysFromCart, normalizeOrderingRules, WEEKDAY_LABELS } from '../../utils/business';
 import { User } from '../../App';
 import PageContainer from '../../components/ui/PageContainer';
 import FormSection from '../../components/ui/FormSection';
-import { getDailyLimits, getOrderCountForDate } from '../../utils/db';
+import { getDailyLimits, getOrderCountForDate, getProducts, getSettings } from '../../utils/db';
 import { geocodeAddress } from '../../utils/geocode';
 import { feeForDistanceKm, feeForPostalCode, MAX_DELIVERY_KM } from '../../utils/delivery';
 
@@ -47,17 +48,34 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
   const [deliveryDistanceKm, setDeliveryDistanceKm] = useState<number | null>(null);
   const [feeStatus, setFeeStatus] = useState<'idle' | 'calculating' | 'distance' | 'postal-fallback' | 'out-of-range'>('idle');
 
+  // Use local date parts — toISOString() returns UTC and shifts the date after 8 PM in MY timezone
+  const toLocalYMD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
   const [minPrepDays] = useState(() => Math.max(1, getMaxPrepDaysFromCart(cartItems)));
   const [minDate] = useState(() => {
     const days = Math.max(1, getMaxPrepDaysFromCart(cartItems));
     const min = new Date();
     min.setDate(min.getDate() + days);
-    // Use local date parts — toISOString() returns UTC and shifts the date after 8 PM in MY timezone
-    const y = min.getFullYear();
-    const m = String(min.getMonth() + 1).padStart(2, '0');
-    const d = String(min.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
+    return toLocalYMD(min);
   });
+
+  // Bulk-order scheduling rule: small orders may only pick the configured
+  // collection weekdays. Exempt products come from the live catalogue so carts
+  // saved before a product was flagged still follow the current rule.
+  const [orderingRules, setOrderingRules] = useState(DEFAULT_ORDERING_RULES);
+  const [exemptProductIds, setExemptProductIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    Promise.all([getSettings(), getProducts()])
+      .then(([s, products]) => {
+        setOrderingRules(normalizeOrderingRules(s?.orderingRules));
+        setExemptProductIds(new Set(products.filter((p: any) => p.bulkExempt).map((p: any) => p.id)));
+      })
+      .catch(() => { /* defaults already applied */ });
+  }, []);
+
+  const { countedUnits, restrictedToWeekdays } = getBulkOrderStatus(cartItems, orderingRules, exemptProductIds);
+  const allowedDaysLabel = [...orderingRules.smallOrderWeekdays].sort().map(d => `${WEEKDAY_LABELS[d]}s`).join(' or ');
 
   useEffect(() => {
     if (cartItems.length === 0) navigate('/customer/cart');
@@ -140,8 +158,10 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
     if (!deliveryDate) {
       errors.push('Please select a pickup/delivery date');
     } else if (deliveryDate < minDate) {
-      // The date picker enforces min, but a typed date can bypass it
+      // The calendar disables these, but guard against a stale selection
       errors.push(`The earliest available date is ${new Date(`${minDate}T00:00:00`).toLocaleDateString('en-MY', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} — your items need ${minPrepDays} day${minPrepDays !== 1 ? 's' : ''} to prepare`);
+    } else if (restrictedToWeekdays && !orderingRules.smallOrderWeekdays.includes(new Date(`${deliveryDate}T00:00:00`).getDay())) {
+      errors.push(`Orders under ${orderingRules.bulkMinQuantity} units can only be collected on ${allowedDaysLabel} — please pick an available date on the calendar, or add more items to unlock all dates`);
     }
     if (deliveryMethod === 'delivery' && !deliveryAddress) errors.push('Please fill in your delivery address');
     if (deliveryMethod === 'delivery' && !postalCode) errors.push('Please fill in your postal code');
@@ -236,8 +256,34 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
           </CardHeader>
           <CardContent className="space-y-4">
             <FormSection>
-              <Label htmlFor="deliveryDate" className="text-base">Select Date *</Label>
-              <Input id="deliveryDate" type="date" value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} min={minDate} className="text-base" />
+              <Label className="text-base">Select Date *</Label>
+              {restrictedToWeekdays && (
+                <div className="info-box">
+                  <p className="text-sm text-blue-900">
+                    <strong>Small order ({countedUnits} unit{countedUnits !== 1 ? 's' : ''}):</strong> orders under{' '}
+                    {orderingRules.bulkMinQuantity} units are collected on {allowedDaysLabel} only. Add more items to
+                    reach {orderingRules.bulkMinQuantity} units and choose any date.
+                  </p>
+                </div>
+              )}
+              <div className="flex justify-center rounded-lg border border-gray-200 bg-white">
+                <CalendarPicker
+                  mode="single"
+                  selected={deliveryDate ? new Date(`${deliveryDate}T00:00:00`) : undefined}
+                  onSelect={(d) => setDeliveryDate(d ? toLocalYMD(d) : '')}
+                  defaultMonth={new Date(`${(deliveryDate && deliveryDate >= minDate ? deliveryDate : minDate)}T00:00:00`)}
+                  fromDate={new Date(`${minDate}T00:00:00`)}
+                  disabled={[
+                    { before: new Date(`${minDate}T00:00:00`) },
+                    ...(restrictedToWeekdays ? [(date: Date) => !orderingRules.smallOrderWeekdays.includes(date.getDay())] : []),
+                  ]}
+                />
+              </div>
+              {deliveryDate && (
+                <p className="text-base font-medium text-gray-900">
+                  Selected: {new Date(`${deliveryDate}T00:00:00`).toLocaleDateString('en-MY', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                </p>
+              )}
               <p className="text-base text-gray-700">Items in your cart require at least {minPrepDays} day{minPrepDays !== 1 ? 's' : ''} advance notice</p>
               {dateCapacity && dateCapacity.limit > 0 && (
                 dateCapacity.count >= dateCapacity.limit

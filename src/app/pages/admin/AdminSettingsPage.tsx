@@ -10,6 +10,10 @@ import { ArrowLeft, Settings, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { User } from '../../App';
 import { getSettings, saveSettings } from '../../utils/db';
+import { DEFAULT_ORDERING_RULES, normalizeOrderingRules, WEEKDAY_LABELS } from '../../utils/business';
+
+// Monday-first display order for the collection-day picker (values are JS getDay())
+const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
 interface AdminSettingsPageProps {
   user: User;
@@ -24,6 +28,8 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
   const [announcementEnabled, setAnnouncementEnabled] = useState(true);
   const [announcementTitle, setAnnouncementTitle] = useState('Festive Season Orders Open!');
   const [announcementText, setAnnouncementText] = useState('Place your orders now for the upcoming celebrations. Limited slots available!');
+  const [bulkMinQuantity, setBulkMinQuantity] = useState(String(DEFAULT_ORDERING_RULES.bulkMinQuantity));
+  const [smallOrderWeekdays, setSmallOrderWeekdays] = useState<number[]>(DEFAULT_ORDERING_RULES.smallOrderWeekdays);
 
   useEffect(() => {
     getSettings().then(s => {
@@ -36,10 +42,26 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
       if (s.announcementEnabled !== undefined) setAnnouncementEnabled(s.announcementEnabled);
       if (s.announcementTitle) setAnnouncementTitle(s.announcementTitle);
       if (s.announcementText) setAnnouncementText(s.announcementText);
+      const rules = normalizeOrderingRules(s.orderingRules);
+      setBulkMinQuantity(String(rules.bulkMinQuantity));
+      setSmallOrderWeekdays(rules.smallOrderWeekdays);
     });
   }, []);
 
+  const toggleWeekday = (day: number) => {
+    setSmallOrderWeekdays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]);
+  };
+
   const handleSave = async () => {
+    const minQty = parseInt(bulkMinQuantity, 10);
+    if (isNaN(minQty) || minQty < 1) {
+      toast.error('Minimum units for flexible dates must be at least 1');
+      return;
+    }
+    if (smallOrderWeekdays.length === 0) {
+      toast.error('Select at least one collection day for small orders');
+      return;
+    }
     try {
       await saveSettings({
         businessName,
@@ -50,6 +72,7 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
         announcementEnabled,
         announcementTitle,
         announcementText,
+        orderingRules: { bulkMinQuantity: minQty, smallOrderWeekdays },
       });
     } catch {
       toast.error('Could not save settings. Please try again.');
@@ -129,6 +152,46 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
                 </div>
               </>
             )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Ordering Rules</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="bulkMinQuantity" className="text-base">Minimum Units for Flexible Dates</Label>
+              <Input id="bulkMinQuantity" type="number" min="1" step="1" inputMode="numeric" value={bulkMinQuantity} onChange={(e) => setBulkMinQuantity(e.target.value)} className="h-12 text-base" />
+              <p className="text-sm text-gray-600">
+                Orders with fewer units than this can only choose the collection days below. Orders that meet the
+                minimum can pick any date. Products marked "No Minimum Quantity" in Product Management are not counted.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-base">Collection Days for Small Orders</Label>
+              <div className="flex flex-wrap gap-2">
+                {WEEKDAY_ORDER.map((day) => {
+                  const selected = smallOrderWeekdays.includes(day);
+                  return (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => toggleWeekday(day)}
+                      aria-pressed={selected}
+                      className={`h-11 px-4 rounded-full border-2 text-sm font-medium transition-colors ${
+                        selected
+                          ? 'border-orange-500 bg-orange-50 text-orange-700'
+                          : 'border-gray-200 bg-white text-gray-700 hover:border-orange-300'
+                      }`}
+                    >
+                      {WEEKDAY_LABELS[day].slice(0, 3)}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-sm text-gray-600">Small orders can only be collected on the selected day(s).</p>
+            </div>
           </CardContent>
         </Card>
 
