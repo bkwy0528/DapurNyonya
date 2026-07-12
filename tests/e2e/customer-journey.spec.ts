@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { registerCustomer, deliveryDateDaysFromNow } from './helpers/registerCustomer';
+import { registerCustomer, selectFirstAvailableCalendarDate } from './helpers/registerCustomer';
 
 // Full happy-path customer journey against the seeded catalog (see
 // global-setup.ts): browse -> add to cart -> checkout (pickup + cash) ->
@@ -31,7 +31,7 @@ test('customer can place a pickup/cash order and see it in tracking', async ({ p
   await page.getByRole('button', { name: 'Proceed to Checkout' }).click();
   await expect(page).toHaveURL(/\/customer\/checkout$/);
 
-  await page.locator('#deliveryDate').fill(deliveryDateDaysFromNow(5));
+  await selectFirstAvailableCalendarDate(page);
   await page.locator('#phone').fill('123456789');
   await page.getByText('Cash', { exact: true }).click();
   await page.getByRole('button', { name: 'Review My Order' }).click();
@@ -52,7 +52,7 @@ test('customer can cancel a pending order from tracking', async ({ page }) => {
   await page.getByRole('button', { name: 'Add to Cart' }).click();
   await page.getByRole('button', { name: 'Proceed to Checkout' }).click();
 
-  await page.locator('#deliveryDate').fill(deliveryDateDaysFromNow(5));
+  await selectFirstAvailableCalendarDate(page);
   await page.locator('#phone').fill('123456789');
   await page.getByText('Cash', { exact: true }).click();
   await page.getByRole('button', { name: 'Review My Order' }).click();

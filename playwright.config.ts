@@ -18,15 +18,17 @@ export default defineConfig({
   retries: 0,
   reporter: [['list']],
   use: {
-    baseURL: 'http://localhost:5173',
+    // Dedicated port so the suite can never collide with — or accidentally
+    // reuse — a normal `npm run dev` server pointed at production Firebase.
+    baseURL: 'http://localhost:5183',
     trace: 'on-first-retry',
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
   ],
   webServer: {
-    command: 'npm run dev:emulator',
-    url: 'http://localhost:5173',
+    command: 'npm run dev:emulator -- --port 5183 --strictPort',
+    url: 'http://localhost:5183',
     reuseExistingServer: false,
     timeout: 60000,
   },

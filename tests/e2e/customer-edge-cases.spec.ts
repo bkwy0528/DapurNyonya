@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { registerCustomer, deliveryDateDaysFromNow } from './helpers/registerCustomer';
+import { registerCustomer, selectFirstAvailableCalendarDate } from './helpers/registerCustomer';
 
 test.describe('registration — invalid input', () => {
   test('rejects mismatched passwords without ever contacting Firebase', async ({ page }) => {
@@ -90,22 +90,35 @@ test.describe('checkout — validation', () => {
     await expect(page).toHaveURL(/\/customer\/checkout$/);
   });
 
-  test('rejects a delivery date earlier than the cart\'s required prep time', async ({ page }) => {
-    await registerCustomer(page, 'Early Date Customer');
+  test('small orders are restricted to the configured collection days', async ({ page }) => {
+    await registerCustomer(page, 'Small Order Customer');
     await page.goto('/customer/order/1'); // Traditional Dumplings — prepDays: 3
     await page.getByRole('button', { name: 'Add to Cart' }).click();
     await page.getByRole('button', { name: 'Proceed to Checkout' }).click();
 
-    // The date input's own `min` attribute would normally stop this, but a
-    // directly-set value bypasses it — exactly the case the app's own
-    // submit-time check exists to catch.
-    await page.locator('#deliveryDate').fill(deliveryDateDaysFromNow(1));
-    await page.locator('#phone').fill('123456789');
-    await page.getByText('Cash', { exact: true }).click();
-    await page.getByRole('button', { name: 'Review My Order' }).click();
+    // 1 unit < default bulk minimum (20) — the rule explainer must show, and
+    // the first selectable calendar day must be a default collection day
+    // (Saturday), which also proves earlier-than-prep-time days are disabled.
+    await expect(page.getByText(/Small order/)).toBeVisible();
+    await selectFirstAvailableCalendarDate(page);
+    await expect(page.getByText(/Selected: Saturday/)).toBeVisible();
+  });
 
-    await expect(page.getByText(/The earliest available date is/)).toBeVisible();
-    await expect(page).toHaveURL(/\/customer\/checkout$/);
+  test('orders meeting the bulk minimum can pick any available date', async ({ page }) => {
+    await registerCustomer(page, 'Bulk Order Customer');
+    await page.goto('/customer/order/1');
+    // Bump quantity from 1 to 20 — the default bulk minimum.
+    const plus = page.locator('button:has(svg.lucide-plus)');
+    for (let i = 0; i < 19; i++) await plus.click();
+    await page.getByRole('button', { name: 'Add to Cart' }).click();
+    await page.getByRole('button', { name: 'Proceed to Checkout' }).click();
+
+    // No small-order restriction: the explainer is gone and the first
+    // selectable day is the prep-time minimum (3 days out), whatever weekday
+    // that happens to be.
+    await expect(page.getByText(/Small order/)).not.toBeVisible();
+    await selectFirstAvailableCalendarDate(page);
+    await expect(page.getByText(/Selected: /)).toBeVisible();
   });
 
   test('an empty cart cannot reach checkout', async ({ page }) => {
