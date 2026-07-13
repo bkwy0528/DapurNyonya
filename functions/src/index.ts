@@ -2,6 +2,8 @@ import { onCall, HttpsError, onRequest } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import Busboy from '@fastify/busboy';
+import type { Request } from 'firebase-functions/v2/https';
 
 initializeApp();
 const db = getFirestore();
@@ -85,16 +87,35 @@ export const createToyyibPayBill = onCall(
   }
 );
 
+// ToyyibPay posts this callback as multipart/form-data, which the functions
+// framework's default parser leaves as a raw Buffer on req.body (it only
+// auto-parses JSON and url-encoded bodies) — so the fields have to be pulled
+// out with busboy instead of read directly off req.body.
+function parseMultipartFields(req: Request): Promise<Record<string, string>> {
+  return new Promise((resolve, reject) => {
+    const fields: Record<string, string> = {};
+    const busboy = Busboy({ headers: { ...req.headers, 'content-type': req.headers['content-type']! } as Record<string, string> & { 'content-type': string } });
+    busboy.on('field', (name: string, value: string) => { fields[name] = value; });
+    busboy.on('finish', () => resolve(fields));
+    busboy.on('error', reject);
+    busboy.end(req.rawBody);
+  });
+}
+
 // ToyyibPay calls this server-to-server once a bill is paid (or fails), independently
 // of whatever the customer's browser does on the return redirect — submitOrder() below
 // only trusts a payment as real once it sees the matching record this callback wrote,
 // never the client-controlled return-page URL. Field names follow ToyyibPay's documented
-// callback payload (billcode, status, amount in cents, refno); verify against the actual
-// sandbox before relying on this in production, since it can't be exercised from here.
+// callback payload (billcode, status, refno). Unlike createBill's billAmount param, the
+// callback's amount field is a decimal Ringgit string (e.g. "10.00"), not cents — it's
+// converted to cents here so it's directly comparable to submitOrder's expectedCents.
 export const toyyibpayCallback = onRequest(
   { region: 'asia-southeast1' },
   async (req, res) => {
-    const body = req.body as Record<string, string>;
+    const contentType = req.headers['content-type'] || '';
+    const body = contentType.includes('multipart/form-data')
+      ? await parseMultipartFields(req)
+      : (req.body as Record<string, string>);
     const billCode = body.billcode || body.billCode;
 
     if (!billCode) {
@@ -107,7 +128,7 @@ export const toyyibpayCallback = onRequest(
       billCode,
       status: body.status,
       refno: body.refno || null,
-      amount: body.amount ? Number(body.amount) : null,
+      amount: body.amount ? Math.round(Number(body.amount) * 100) : null,
       orderId: body.order_id || null,
       reason: body.reason || null,
       receivedAt: FieldValue.serverTimestamp(),
