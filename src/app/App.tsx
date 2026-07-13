@@ -53,6 +53,11 @@ interface AppRoutesProps {
 
 function AppRoutes({ user, setUser, handleLogout, handleProfileUpdate }: AppRoutesProps) {
   const location = useLocation();
+  // SPA navigation keeps the previous scroll position, so a new page would
+  // open mid-scroll — reset to the top like a full page load would.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
   // Set by the cart page when a guest tries to checkout, so login/register can
   // send them back to the cart they built instead of the default home page.
   const from = (location.state as { from?: string } | null)?.from;

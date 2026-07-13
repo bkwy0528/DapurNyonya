@@ -72,7 +72,9 @@ export default function Header({ user, onLogout }: { user: any; onLogout?: () =>
               <Link to="/customer/cart" aria-label="Cart" className="header-icon-button relative">
                 <ShoppingCart className="w-5 h-5" />
                 {cartCount > 0 && (
-                  <span className="cart-badge">{cartCount}</span>
+                  // key remounts the badge when the count changes so the
+                  // badge-pop animation replays
+                  <span key={cartCount} className="cart-badge">{cartCount}</span>
                 )}
               </Link>
             )}

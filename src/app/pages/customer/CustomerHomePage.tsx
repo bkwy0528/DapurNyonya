@@ -24,7 +24,7 @@ export default function CustomerHomePage({ user }: CustomerHomePageProps) {
         <div className="page-hero__inner">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-3">
-              <Link to="/customer/profile" className="w-12 h-12 bg-white bg-opacity-20 rounded-full flex items-center justify-center overflow-hidden cursor-pointer hover:bg-opacity-30 transition-all">
+              <Link to="/customer/profile" className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center overflow-hidden cursor-pointer hover:bg-white/30 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80">
                 {user.profilePicture ? (
                   <img src={user.profilePicture} alt="Profile" className="w-full h-full object-cover" />
                 ) : (

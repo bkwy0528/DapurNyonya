@@ -36,7 +36,7 @@
   }
 
   .app-nav-link {
-    @apply inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-100 hover:text-orange-600;
+    @apply inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-100 hover:text-orange-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400;
   }
 
   .app-nav-link--active {
@@ -44,11 +44,12 @@
   }
 
   .header-icon-button {
-    @apply inline-flex h-10 w-10 items-center justify-center rounded-full text-gray-700 transition-colors hover:bg-gray-100 hover:text-orange-600;
+    @apply inline-flex h-10 w-10 items-center justify-center rounded-full text-gray-700 transition-colors hover:bg-gray-100 hover:text-orange-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400;
   }
 
   .cart-badge {
     @apply absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white;
+    animation: badge-pop 0.25s ease-out;
   }
 
   .mobile-menu-wrap {
@@ -57,10 +58,11 @@
 
   .mobile-menu-panel {
     @apply grid gap-2 rounded-2xl border border-gray-200 bg-white p-3 shadow-lg;
+    animation: page-enter 0.18s ease-out;
   }
 
   .mobile-nav-link {
-    @apply flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-gray-700 hover:bg-gray-100;
+    @apply flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-gray-700 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400;
   }
 
   .mobile-nav-link--active {
@@ -84,7 +86,7 @@
   }
 
   .page-back-link {
-    @apply mb-4 inline-flex items-center text-white hover:text-gray-100;
+    @apply mb-4 inline-flex items-center rounded-md text-white hover:text-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80;
   }
 
   .brand-button {
@@ -204,6 +206,46 @@
 
   .install-prompt__close {
     @apply h-8 w-8 shrink-0;
+  }
+}
+
+/* Motion: shared entrance animation for pages and the mobile menu, and a pop
+   for the cart badge (Header remounts the badge via key when the count
+   changes, which replays the animation). */
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes badge-pop {
+  0% {
+    transform: scale(0.4);
+  }
+  70% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Each page's root element is the first child of .app-shell, so a route change
+   mounts a fresh node and replays the entrance. */
+.app-shell > *:first-child {
+  animation: page-enter 0.3s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell > *:first-child,
+  .mobile-menu-panel,
+  .cart-badge {
+    animation: none;
   }
 }
 

@@ -83,7 +83,7 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
       <div className="page-hero pb-8">
         <div className="page-hero__inner page-hero__inner--wide">
           <div className="flex items-center space-x-4 mb-2">
-            <div className="w-14 h-14 bg-white bg-opacity-20 rounded-full flex items-center justify-center overflow-hidden">
+            <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center overflow-hidden">
               {adminProfilePicture ? (
                 <img src={adminProfilePicture} alt="Admin" className="w-full h-full object-cover" />
               ) : (

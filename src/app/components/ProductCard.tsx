@@ -15,10 +15,10 @@ interface ProductCardProps {
 
 export default function ProductCard({ product, orderTo, orderLabel = 'Order This', detailsTo }: ProductCardProps) {
   return (
-    <Card className="overflow-hidden hover:shadow-lg transition-shadow">
+    <Card className="group overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5">
       <div className="flex flex-col sm:flex-row">
         <div className="w-full sm:w-64 aspect-[4/3] sm:self-start overflow-hidden flex-shrink-0 bg-gray-100">
-          <img src={product.image} alt={product.name} onError={onImageError} className="w-full h-full object-cover" />
+          <img src={product.image} alt={product.name} onError={onImageError} loading="lazy" className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
         </div>
         <div className="flex-1 p-6">
           <div className="flex items-start justify-between mb-3">
