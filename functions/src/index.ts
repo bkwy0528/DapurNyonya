@@ -283,9 +283,16 @@ export const submitOrder = onCall(
       // checkout pre-checked capacity before payment started — so it is created
       // regardless and the (rare) overbooking is logged for the admin to resolve.
       const countRef = db.collection('orderCounts').doc(data.deliveryDate);
-      const limitSnap = await tx.get(db.collection('dailyLimits').doc(data.deliveryDate));
+      // A date without its own limit falls back to the admin's default limit,
+      // stored under the reserved `_default` key in the same collection.
+      const [limitSnap, defaultLimitSnap] = await Promise.all([
+        tx.get(db.collection('dailyLimits').doc(data.deliveryDate)),
+        tx.get(db.collection('dailyLimits').doc('_default')),
+      ]);
       const countSnap = await tx.get(countRef);
-      const limit = limitSnap.exists ? Number((limitSnap.data() as any).limit) || 0 : 0;
+      const limit = limitSnap.exists
+        ? Number((limitSnap.data() as any).limit) || 0
+        : defaultLimitSnap.exists ? Number((defaultLimitSnap.data() as any).limit) || 0 : 0;
       const booked = countSnap.exists ? Math.max(0, Number((countSnap.data() as any).count) || 0) : 0;
       if (limit > 0 && booked >= limit) {
         logger.warn('Paid order accepted over the daily capacity limit', {

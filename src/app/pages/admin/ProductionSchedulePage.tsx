@@ -9,6 +9,7 @@ import { User } from '../../App';
 import { getStatusStyle } from '../../utils/statusStyles';
 import { Calendar } from '../../components/ui/calendar';
 import { getOrders, getDailyLimits, saveDailyLimit, clearDailyLimit } from '../../utils/db';
+import { DEFAULT_DAILY_LIMIT_KEY, getLimitForDate } from '../../utils/business';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
 interface ProductionSchedulePageProps {
@@ -29,6 +30,7 @@ export default function ProductionSchedulePage({ user: _user }: ProductionSchedu
     return today;
   });
   const [tempLimit, setTempLimit] = useState('');
+  const [tempDefaultLimit, setTempDefaultLimit] = useState('');
 
   const toDateKey = (date: Date) => {
     const year = date.getFullYear();
@@ -114,18 +116,46 @@ export default function ProductionSchedulePage({ user: _user }: ProductionSchedu
     setTempLimit('');
   };
 
+  // The default limit is stored as a reserved doc in the same collection, so
+  // the per-date save/clear helpers work for it unchanged.
+  const handleSaveDefaultLimit = async () => {
+    const parsed = parseInt(tempDefaultLimit || '0', 10);
+    if (parsed > 0) {
+      await saveDailyLimit(DEFAULT_DAILY_LIMIT_KEY, parsed);
+      setDailyLimits(prev => ({ ...prev, [DEFAULT_DAILY_LIMIT_KEY]: parsed }));
+    } else {
+      await handleClearDefaultLimit();
+      return;
+    }
+    setTempDefaultLimit('');
+  };
+
+  const handleClearDefaultLimit = async () => {
+    await clearDailyLimit(DEFAULT_DAILY_LIMIT_KEY);
+    setDailyLimits(prev => {
+      const updated = { ...prev };
+      delete updated[DEFAULT_DAILY_LIMIT_KEY];
+      return updated;
+    });
+    setTempDefaultLimit('');
+  };
+
   const selectedDateKey = toDateKey(selectedDate);
   const selectedOrders = groupedOrders[selectedDateKey] || [];
   const selectedOrdersCount = getOrderCountForDate(selectedDateKey);
-  const selectedLimit = dailyLimits[selectedDateKey] ?? 0;
+  const defaultLimit = dailyLimits[DEFAULT_DAILY_LIMIT_KEY] ?? 0;
+  const selectedHasOverride = selectedDateKey in dailyLimits;
+  const selectedLimit = getLimitForDate(dailyLimits, selectedDateKey);
   const selectedDaysUntil = getDaysUntil(selectedDateKey);
   const selectedPriority = getPriorityBadge(selectedDaysUntil);
   const selectedStages = getProductionStages(selectedDaysUntil);
 
   const hasOrdersDates = Object.keys(groupedOrders).map(fromDateKey);
-  const fullCapacityDates = Object.keys(dailyLimits)
+  // Only dates that have orders can be at capacity, so iterating the order
+  // dates also covers dates capped by the default limit.
+  const fullCapacityDates = Object.keys(groupedOrders)
     .filter(dateKey => {
-      const limit = dailyLimits[dateKey] ?? 0;
+      const limit = getLimitForDate(dailyLimits, dateKey);
       return limit > 0 && getOrderCountForDate(dateKey) >= limit;
     })
     .map(fromDateKey);
@@ -166,6 +196,29 @@ export default function ProductionSchedulePage({ user: _user }: ProductionSchedu
           </CardHeader>
 
           <CardContent className="grid gap-6 lg:grid-cols-[1.12fr_0.88fr] p-6">
+            <div className="lg:col-span-2 rounded-xl border bg-white p-4 shadow-sm">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Default daily capacity — applies to every day</p>
+                  <p className="text-sm text-gray-500">
+                    {defaultLimit > 0
+                      ? `Currently ${defaultLimit} orders per day. Dates with their own limit below keep it.`
+                      : 'No default set — days without their own limit are unlimited.'}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    value={tempDefaultLimit}
+                    onChange={(e) => setTempDefaultLimit(e.target.value.replace(/\D/g, ''))}
+                    placeholder="Max orders / day"
+                    className="h-11 w-36"
+                  />
+                  <Button onClick={handleSaveDefaultLimit} className="brand-button">Save</Button>
+                  <Button variant="outline" onClick={handleClearDefaultLimit}>Clear</Button>
+                </div>
+              </div>
+            </div>
+
             <div className="rounded-xl border bg-white p-3 shadow-sm">
               <Calendar
                 mode="single"
@@ -203,6 +256,9 @@ export default function ProductionSchedulePage({ user: _user }: ProductionSchedu
                     <div className={`rounded-lg border p-3 ${selectedLimit > 0 && selectedOrdersCount >= selectedLimit ? 'border-red-200 bg-red-50' : 'bg-white'}`}>
                       <p className="text-xs uppercase tracking-wide text-gray-500">Capacity</p>
                       <p className="text-2xl font-bold text-gray-900">{selectedLimit > 0 ? `${Math.max(0, selectedLimit - selectedOrdersCount)} left` : 'Unlimited'}</p>
+                      {selectedLimit > 0 && (
+                        <p className="text-xs text-gray-500">{selectedHasOverride ? `Limit ${selectedLimit} for this date` : `Default limit ${selectedLimit}`}</p>
+                      )}
                     </div>
                   </div>
 
@@ -210,7 +266,10 @@ export default function ProductionSchedulePage({ user: _user }: ProductionSchedu
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <p className="text-sm font-medium text-gray-900">Set daily capacity</p>
-                        <p className="text-sm text-gray-500">Limit how many orders can be accepted on this date.</p>
+                        <p className="text-sm text-gray-500">
+                          Limit how many orders can be accepted on this date.
+                          {defaultLimit > 0 && ` Clear reverts this date to the default (${defaultLimit}).`}
+                        </p>
                       </div>
                       <Badge variant="outline">{selectedDateKey}</Badge>
                     </div>

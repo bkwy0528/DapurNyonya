@@ -9,7 +9,7 @@ import { Textarea } from '../../components/ui/textarea';
 import { ArrowLeft, MapPin, Truck, Home as HomeIcon, Calendar, Smartphone, Building2, CheckCircle2 } from 'lucide-react';
 import { Calendar as CalendarPicker } from '../../components/ui/calendar';
 import { useCart } from '../../context/CartContext';
-import { DEFAULT_ORDERING_RULES, getBulkOrderStatus, getMaxPrepDaysFromCart, normalizeOrderingRules, WEEKDAY_LABELS } from '../../utils/business';
+import { DEFAULT_ORDERING_RULES, getBulkOrderStatus, getLimitForDate, getMaxPrepDaysFromCart, isSmallOrderDateAllowed, normalizeOrderingRules, toLocalYMD, WEEKDAY_LABELS } from '../../utils/business';
 import { User } from '../../App';
 import PageContainer from '../../components/ui/PageContainer';
 import FormSection from '../../components/ui/FormSection';
@@ -41,9 +41,6 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
   const [formErrors, setFormErrors] = useState<string[]>([]);
   const errorBoxRef = useRef<HTMLDivElement>(null);
 
-  // Use local date parts — toISOString() returns UTC and shifts the date after 8 PM in MY timezone
-  const toLocalYMD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-
   const [minPrepDays] = useState(() => Math.max(1, getMaxPrepDaysFromCart(cartItems)));
   const [minDate] = useState(() => {
     const days = Math.max(1, getMaxPrepDaysFromCart(cartItems));
@@ -69,6 +66,11 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
 
   const { countedUnits, restrictedToWeekdays } = getBulkOrderStatus(cartItems, orderingRules, exemptProductIds);
   const allowedDaysLabel = [...orderingRules.smallOrderWeekdays].sort().map(d => `${WEEKDAY_LABELS[d]}s`).join(' or ');
+  // Mention the festive season window only while dates inside it can still be
+  // picked — once it has fully passed it would just confuse customers.
+  const seasonLabel = orderingRules.seasonStart && orderingRules.seasonEnd && orderingRules.seasonEnd >= toLocalYMD(new Date())
+    ? `${new Date(`${orderingRules.seasonStart}T00:00:00`).toLocaleDateString('en-MY', { day: 'numeric', month: 'long' })} – ${new Date(`${orderingRules.seasonEnd}T00:00:00`).toLocaleDateString('en-MY', { day: 'numeric', month: 'long', year: 'numeric' })}`
+    : null;
 
   useEffect(() => {
     if (cartItems.length === 0) navigate('/customer/cart');
@@ -77,7 +79,7 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
   useEffect(() => {
     if (!deliveryDate) { setDateCapacity(null); return; }
     Promise.all([getOrderCountForDate(deliveryDate), getDailyLimits()])
-      .then(([count, limits]) => { setDateCapacity({ count, limit: limits[deliveryDate] ?? 0 }); })
+      .then(([count, limits]) => { setDateCapacity({ count, limit: getLimitForDate(limits, deliveryDate) }); })
       .catch(() => { /* capacity display unavailable on read failure */ });
   }, [deliveryDate]);
 
@@ -102,8 +104,8 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
     } else if (deliveryDate < minDate) {
       // The calendar disables these, but guard against a stale selection
       errors.push(`The earliest available date is ${new Date(`${minDate}T00:00:00`).toLocaleDateString('en-MY', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} — your items need ${minPrepDays} day${minPrepDays !== 1 ? 's' : ''} to prepare`);
-    } else if (restrictedToWeekdays && !orderingRules.smallOrderWeekdays.includes(new Date(`${deliveryDate}T00:00:00`).getDay())) {
-      errors.push(`Orders under ${orderingRules.bulkMinQuantity} units can only be collected on ${allowedDaysLabel} — please pick an available date on the calendar, or add more items to unlock all dates`);
+    } else if (restrictedToWeekdays && !isSmallOrderDateAllowed(new Date(`${deliveryDate}T00:00:00`), orderingRules)) {
+      errors.push(`Orders under ${orderingRules.bulkMinQuantity} units can only be collected on ${allowedDaysLabel}${seasonLabel ? ` (or any date during the festive season, ${seasonLabel})` : ''} — please pick an available date on the calendar, or add more items to unlock all dates`);
     }
     if (deliveryMethod === 'delivery' && !deliveryAddress) errors.push('Please fill in your delivery address');
     if (deliveryMethod === 'delivery' && !postalCode) errors.push('Please fill in your postal code');
@@ -120,7 +122,7 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
     // orderCounts collection, so this works for customers too)
     try {
       const [count, limits] = await Promise.all([getOrderCountForDate(deliveryDate), getDailyLimits()]);
-      const limit = limits[deliveryDate] ?? 0;
+      const limit = getLimitForDate(limits, deliveryDate);
       if (limit > 0 && count >= limit) {
         showErrors(['The selected date is fully booked. Please choose another date.']);
         return;
@@ -185,8 +187,9 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
                 <div className="info-box">
                   <p className="text-sm text-blue-900">
                     <strong>Small order ({countedUnits} unit{countedUnits !== 1 ? 's' : ''}):</strong> orders under{' '}
-                    {orderingRules.bulkMinQuantity} units are collected on {allowedDaysLabel} only. Add more items to
-                    reach {orderingRules.bulkMinQuantity} units and choose any date.
+                    {orderingRules.bulkMinQuantity} units are collected on {allowedDaysLabel} only
+                    {seasonLabel ? <>, plus any date during the festive season ({seasonLabel})</> : null}. Add more
+                    items to reach {orderingRules.bulkMinQuantity} units and choose any date.
                   </p>
                 </div>
               )}
@@ -199,7 +202,7 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
                   fromDate={new Date(`${minDate}T00:00:00`)}
                   disabled={[
                     { before: new Date(`${minDate}T00:00:00`) },
-                    ...(restrictedToWeekdays ? [(date: Date) => !orderingRules.smallOrderWeekdays.includes(date.getDay())] : []),
+                    ...(restrictedToWeekdays ? [(date: Date) => !isSmallOrderDateAllowed(date, orderingRules)] : []),
                   ]}
                 />
               </div>

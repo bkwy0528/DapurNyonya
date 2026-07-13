@@ -30,6 +30,8 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
   const [announcementText, setAnnouncementText] = useState('Place your orders now for the upcoming celebrations. Limited slots available!');
   const [bulkMinQuantity, setBulkMinQuantity] = useState(String(DEFAULT_ORDERING_RULES.bulkMinQuantity));
   const [smallOrderWeekdays, setSmallOrderWeekdays] = useState<number[]>(DEFAULT_ORDERING_RULES.smallOrderWeekdays);
+  const [seasonStart, setSeasonStart] = useState('');
+  const [seasonEnd, setSeasonEnd] = useState('');
 
   useEffect(() => {
     getSettings().then(s => {
@@ -45,6 +47,8 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
       const rules = normalizeOrderingRules(s.orderingRules);
       setBulkMinQuantity(String(rules.bulkMinQuantity));
       setSmallOrderWeekdays(rules.smallOrderWeekdays);
+      setSeasonStart(rules.seasonStart || '');
+      setSeasonEnd(rules.seasonEnd || '');
     });
   }, []);
 
@@ -62,6 +66,14 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
       toast.error('Select at least one collection day for small orders');
       return;
     }
+    if (!!seasonStart !== !!seasonEnd) {
+      toast.error('Set both a start and an end date for the festive season, or clear both');
+      return;
+    }
+    if (seasonStart && seasonEnd && seasonStart > seasonEnd) {
+      toast.error('The festive season start date must be on or before the end date');
+      return;
+    }
     try {
       await saveSettings({
         businessName,
@@ -72,7 +84,12 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
         announcementEnabled,
         announcementTitle,
         announcementText,
-        orderingRules: { bulkMinQuantity: minQty, smallOrderWeekdays },
+        orderingRules: {
+          bulkMinQuantity: minQty,
+          smallOrderWeekdays,
+          seasonStart: seasonStart || null,
+          seasonEnd: seasonEnd || null,
+        },
       });
     } catch {
       toast.error('Could not save settings. Please try again.');
@@ -191,6 +208,28 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
                 })}
               </div>
               <p className="text-sm text-gray-600">Small orders can only be collected on the selected day(s).</p>
+            </div>
+            <div className="space-y-2 rounded-lg border border-orange-200 bg-orange-50/50 p-4">
+              <Label className="text-base">Festive Season — Flexible Dates for Everyone</Label>
+              <p className="text-sm text-gray-600">
+                During this period (e.g. bak chang season) small orders can also pick any collection date, not just
+                the days above. Leave both dates empty when there is no festive season.
+              </p>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="seasonStart" className="text-sm text-gray-700">Season Starts</Label>
+                  <Input id="seasonStart" type="date" value={seasonStart} onChange={(e) => setSeasonStart(e.target.value)} className="h-12 text-base" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="seasonEnd" className="text-sm text-gray-700">Season Ends</Label>
+                  <Input id="seasonEnd" type="date" value={seasonEnd} onChange={(e) => setSeasonEnd(e.target.value)} className="h-12 text-base" />
+                </div>
+              </div>
+              {(seasonStart || seasonEnd) && (
+                <Button variant="outline" size="sm" onClick={() => { setSeasonStart(''); setSeasonEnd(''); }}>
+                  Clear Festive Season
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
