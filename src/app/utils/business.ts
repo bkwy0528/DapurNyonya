@@ -12,9 +12,9 @@ export function getDateKey(date: Date = new Date()) {
   return `${YY}${MM}${DD}`;
 }
 
-// Sequence comes from an atomic per-day Firestore counter (see
-// getNextDailyOrderSequence in db.ts) so the first order approved each day is 01,
-// the next is 02, etc. — makes approval order visible at a glance.
+// Sequence comes from an atomic per-day Firestore counter (assigned server-side
+// by the submitOrder function) so the first order paid each day is 01, the next
+// is 02, etc. — makes the day's order sequence visible at a glance.
 export function generateFinalOrderNumber(sequence: number) {
   const seq = String(sequence).padStart(2, '0');
   return `DN-${getDateKey()}-${seq}`;

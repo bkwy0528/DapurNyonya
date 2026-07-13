@@ -131,11 +131,10 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
 
     setFormErrors([]);
 
-    // This is only what gets shown on the confirmation screen before the
-    // customer commits — submitOrder() (called from OrderConfirmationPage /
-    // ToyyibPayReturnPage) recomputes subtotal/total/items from the live
-    // product catalog and ignores whatever is written here, so nothing in
-    // this object is trusted for the actual order.
+    // This is only what gets shown on the payment screen before the customer
+    // commits — submitOrder() (called from ToyyibPayReturnPage) recomputes
+    // subtotal/total/items from the live product catalog and ignores whatever
+    // is written here, so nothing in this object is trusted for the actual order.
     const pendingOrder = {
       clientRequestId: crypto.randomUUID(),
       customerId: user.id,

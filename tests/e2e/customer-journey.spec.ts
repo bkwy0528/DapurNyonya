@@ -58,6 +58,7 @@ test('a paid order appears in tracking with its receipt, and cannot be cancelled
 
   await page.getByRole('button', { name: 'View Receipt' }).click();
   await expect(page).toHaveURL(/\/customer\/receipt\//);
-  await expect(page.getByText(finalizedNumber)).toBeVisible();
+  // exact: the receipt shows the number twice (heading + "Issued by" footer)
+  await expect(page.getByText(finalizedNumber, { exact: true })).toBeVisible();
   await expect(page.getByText('Paid Online')).toBeVisible();
 });
