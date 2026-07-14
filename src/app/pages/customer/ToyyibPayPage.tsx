@@ -38,6 +38,7 @@ export default function ToyyibPayPage({ user }: ToyyibPayPageProps) {
           customerPhone: pendingOrder.customerPhone,
           returnUrl: `${window.location.origin}/customer/payment-return`,
           callbackUrl: 'https://asia-southeast1-dapurnyonya-9b752.cloudfunctions.net/toyyibpayCallback',
+          paymentMethod: pendingOrder.paymentMethod,
         });
 
         // pendingOrder / cart are left untouched until ToyyibPayReturnPage confirms

@@ -8,7 +8,7 @@ import type { Request } from 'firebase-functions/v2/https';
 initializeApp();
 const db = getFirestore();
 
-const TOYYIBPAY_BASE_URL = 'https://dev.toyyibpay.com'; // sandbox — switch to https://toyyibpay.com for production
+const TOYYIBPAY_BASE_URL = 'https://toyyibpay.com';
 
 // No Firestore order exists yet at bill-creation time — the order is only recorded
 // client-side after ToyyibPay confirms success on the return redirect (see
@@ -20,18 +20,28 @@ export const createToyyibPayBill = onCall(
       throw new HttpsError('unauthenticated', 'Must be signed in to make a payment.');
     }
 
-    const { amount, customerName, customerEmail, customerPhone, returnUrl, callbackUrl } = request.data as {
+    const { amount, customerName, customerEmail, customerPhone, returnUrl, callbackUrl, paymentMethod } = request.data as {
       amount: number;
       customerName: string;
       customerEmail?: string;
       customerPhone?: string;
       returnUrl: string;
       callbackUrl: string;
+      paymentMethod?: 'tng' | 'fpx';
     };
 
     if (!amount || amount <= 0) {
       throw new HttpsError('invalid-argument', 'Invalid amount.');
     }
+
+    // billPaymentChannel only distinguishes FPX vs credit card vs both — DuitNow
+    // QR is a separate, additive toggle on top of it, not a replacement, so
+    // 'tng' can't fully exclude the FPX tab the way 'fpx' excludes DuitNow QR.
+    // Requires DuitNow QR to be activated for the category on ToyyibPay's
+    // dashboard, or enableDuitNowQR has no visible effect.
+    const channelParams: Record<string, string> = paymentMethod === 'tng'
+      ? { billPaymentChannel: '0', enableDuitNowQR: '1', chargeDuitNowQR: '0' }
+      : { billPaymentChannel: '0' };
 
     // Credentials live in functions/.env (server-only — never sent to Firestore or
     // the browser) so they're set via `firebase deploy --only functions`, not the app UI.
@@ -59,6 +69,7 @@ export const createToyyibPayBill = onCall(
       billEmail: customerEmail || '',
       billPhone: customerPhone || '',
       billContentEmail: 'Thank you for your order!',
+      ...channelParams,
     });
 
     const response = await fetch(`${TOYYIBPAY_BASE_URL}/index.php/api/createBill`, {
