@@ -1,3 +1,14 @@
+/* The app has no dark-mode toggle (the .dark variables in theme.css are
+   unused), but mobile browsers still render native <input type="date">
+   digits/placeholder using the OS colour scheme independently of page CSS.
+   On a phone set to dark mode that produced near-white text on our light
+   grey input background — invisible "dd/mm/yyyy". Pin it to light so the
+   native control always matches the page. */
+input[type='date'] {
+  color-scheme: light;
+  min-width: 0;
+}
+
 @layer components {
   .app-shell {
     @apply min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 pt-16;

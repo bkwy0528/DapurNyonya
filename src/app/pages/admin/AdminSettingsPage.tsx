@@ -6,11 +6,12 @@ import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
 import { Button } from '../../components/ui/button';
 import { Switch } from '../../components/ui/switch';
-import { ArrowLeft, Settings, Save } from 'lucide-react';
+import { Calendar as CalendarPicker } from '../../components/ui/calendar';
+import { ArrowLeft, Settings, Save, Calendar as CalendarIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { User } from '../../App';
 import { getSettings, saveSettings } from '../../utils/db';
-import { DEFAULT_ORDERING_RULES, normalizeOrderingRules, WEEKDAY_LABELS } from '../../utils/business';
+import { DEFAULT_ORDERING_RULES, normalizeOrderingRules, toLocalYMD, WEEKDAY_LABELS } from '../../utils/business';
 
 // Monday-first display order for the collection-day picker (values are JS getDay())
 const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
@@ -32,6 +33,7 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
   const [smallOrderWeekdays, setSmallOrderWeekdays] = useState<number[]>(DEFAULT_ORDERING_RULES.smallOrderWeekdays);
   const [seasonStart, setSeasonStart] = useState('');
   const [seasonEnd, setSeasonEnd] = useState('');
+  const [openSeasonPicker, setOpenSeasonPicker] = useState<'start' | 'end' | null>(null);
 
   useEffect(() => {
     getSettings().then(s => {
@@ -55,6 +57,13 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
   const toggleWeekday = (day: number) => {
     setSmallOrderWeekdays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]);
   };
+
+  // Native <input type="date"> renders inconsistently across mobile
+  // browsers (invisible placeholder in dark mode, blank control on some
+  // WebKit builds), so this pair uses the same custom CalendarPicker the
+  // checkout flow already relies on instead.
+  const formatSeasonDate = (ymd: string) =>
+    new Date(`${ymd}T00:00:00`).toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' });
 
   const handleSave = async () => {
     const minQty = parseInt(bulkMinQuantity, 10);
@@ -215,18 +224,54 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
                 During this period (e.g. bak chang season) small orders can also pick any collection date, not just
                 the days above. Leave both dates empty when there is no festive season.
               </p>
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="seasonStart" className="text-sm text-gray-700">Season Starts</Label>
-                  <Input id="seasonStart" type="date" value={seasonStart} onChange={(e) => setSeasonStart(e.target.value)} className="h-12 text-base" />
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div className="space-y-2 min-w-0">
+                  <Label className="text-sm text-gray-700">Season Starts</Label>
+                  <button
+                    type="button"
+                    onClick={() => setOpenSeasonPicker(openSeasonPicker === 'start' ? null : 'start')}
+                    className="h-12 w-full flex items-center justify-between rounded-md border border-input px-3 text-base bg-input-background"
+                  >
+                    <span className={seasonStart ? 'text-gray-900' : 'text-muted-foreground'}>
+                      {seasonStart ? formatSeasonDate(seasonStart) : 'Select date'}
+                    </span>
+                    <CalendarIcon className="w-4 h-4 text-gray-500 shrink-0" />
+                  </button>
+                  {openSeasonPicker === 'start' && (
+                    <div className="flex justify-center rounded-lg border border-gray-200 bg-white">
+                      <CalendarPicker
+                        mode="single"
+                        selected={seasonStart ? new Date(`${seasonStart}T00:00:00`) : undefined}
+                        onSelect={(d) => { setSeasonStart(d ? toLocalYMD(d) : ''); setOpenSeasonPicker(null); }}
+                      />
+                    </div>
+                  )}
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="seasonEnd" className="text-sm text-gray-700">Season Ends</Label>
-                  <Input id="seasonEnd" type="date" value={seasonEnd} onChange={(e) => setSeasonEnd(e.target.value)} className="h-12 text-base" />
+                <div className="space-y-2 min-w-0">
+                  <Label className="text-sm text-gray-700">Season Ends</Label>
+                  <button
+                    type="button"
+                    onClick={() => setOpenSeasonPicker(openSeasonPicker === 'end' ? null : 'end')}
+                    className="h-12 w-full flex items-center justify-between rounded-md border border-input px-3 text-base bg-input-background"
+                  >
+                    <span className={seasonEnd ? 'text-gray-900' : 'text-muted-foreground'}>
+                      {seasonEnd ? formatSeasonDate(seasonEnd) : 'Select date'}
+                    </span>
+                    <CalendarIcon className="w-4 h-4 text-gray-500 shrink-0" />
+                  </button>
+                  {openSeasonPicker === 'end' && (
+                    <div className="flex justify-center rounded-lg border border-gray-200 bg-white">
+                      <CalendarPicker
+                        mode="single"
+                        selected={seasonEnd ? new Date(`${seasonEnd}T00:00:00`) : undefined}
+                        onSelect={(d) => { setSeasonEnd(d ? toLocalYMD(d) : ''); setOpenSeasonPicker(null); }}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
               {(seasonStart || seasonEnd) && (
-                <Button variant="outline" size="sm" onClick={() => { setSeasonStart(''); setSeasonEnd(''); }}>
+                <Button variant="outline" size="sm" onClick={() => { setSeasonStart(''); setSeasonEnd(''); setOpenSeasonPicker(null); }}>
                   Clear Festive Season
                 </Button>
               )}
