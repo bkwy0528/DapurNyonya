@@ -229,12 +229,22 @@ export default function AnalyticsDashboard({ user: _user }: AnalyticsDashboardPr
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={analytics.productSales}>
+                  {/* No <Legend> here — the card title already says what this
+                      chart is, and a legend label would collide with the
+                      rotated product-name ticks on narrow phone screens. */}
+                  <BarChart data={analytics.productSales} margin={{ bottom: 24 }}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
+                    <XAxis
+                      dataKey="name"
+                      angle={-45}
+                      textAnchor="end"
+                      height={70}
+                      interval={0}
+                      tick={{ fontSize: 11 }}
+                      tickFormatter={(name: string) => name.length > 12 ? `${name.slice(0, 12)}…` : name}
+                    />
                     <YAxis />
-                    <Tooltip formatter={(value: number, name: string) => name === 'revenue' ? `RM ${value.toFixed(2)}` : value} contentStyle={{ backgroundColor: '#fff', border: '1px solid #ccc' }} />
-                    <Legend />
+                    <Tooltip formatter={(value: number) => `RM ${value.toFixed(2)}`} labelFormatter={(name: string) => name} contentStyle={{ backgroundColor: '#fff', border: '1px solid #ccc' }} />
                     <Bar dataKey="revenue" fill="#10b981" name="Revenue (RM)" />
                   </BarChart>
                 </ResponsiveContainer>
