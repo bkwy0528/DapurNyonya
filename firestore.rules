@@ -16,6 +16,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Ingredient master list: anyone can read, only admin can write
+    match /ingredients/{ingredientId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // Orders: customers can read their own, admin can read/write all. Orders
     // are never created directly by a client — the submitOrder Cloud Function
     // (Admin SDK, bypasses these rules) recomputes prices from the real

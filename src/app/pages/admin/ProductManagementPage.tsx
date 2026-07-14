@@ -7,11 +7,13 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../../components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Switch } from '../../components/ui/switch';
 import { ArrowLeft, Crop, Plus, Edit, Trash2, Upload, X, Wheat } from 'lucide-react';
 import { toast } from 'sonner';
 import { User } from '../../App';
-import { getOrders, getProducts, saveProduct, deleteProduct } from '../../utils/db';
+import { getOrders, getProducts, saveProduct, deleteProduct, getIngredients, saveIngredient } from '../../utils/db';
+import { SUPPORTED_UNITS, Ingredient, normalizeIngredientName } from '../../utils/ingredients';
 import { fileToDataUrl } from '../../utils/image';
 import { onImageError } from '../../utils/imageFallback';
 import ImageCropDialog from '../../components/ImageCropDialog';
@@ -21,10 +23,15 @@ interface ProductManagementPageProps {
   user: User;
 }
 
+const INGREDIENT_DATALIST_ID = 'ingredient-master-datalist';
+
 export interface ProductIngredient {
+  ingredientId?: string; // references ingredients/{id} in the master list, once matched/created
   name: string;
-  quantity: number; // amount needed per 1 unit of the product
-  unit: string;
+  quantity: number; // amount needed per 1 unit of the product — derived from batch fields when present
+  unit: string; // locked to the matched ingredient's unit once ingredientId is set
+  batchAmount?: number; // total amount used for one batch (entry convenience)
+  batchYield?: number;  // how many product units that batch makes (entry convenience)
 }
 
 interface Product {
@@ -86,9 +93,18 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
     bulkExempt: false,
   });
   const [ingredients, setIngredients] = useState<ProductIngredient[]>([]);
+  const [masterIngredients, setMasterIngredients] = useState<Ingredient[]>([]);
 
   useEffect(() => {
-    getProducts().then(setProducts).finally(() => setLoading(false));
+    getProducts()
+      .then(setProducts)
+      .finally(() => setLoading(false));
+    // Independent of the products load: the ingredient master list is only
+    // needed for the recipe picker, so a failure here (e.g. rules not yet
+    // deployed) must never block the product list itself from rendering.
+    getIngredients()
+      .then(setMasterIngredients)
+      .catch(() => {});
   }, []);
 
   // Selecting a photo opens the crop dialog first; the cropped result is
@@ -113,11 +129,45 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
   };
 
   const addIngredientRow = () => setIngredients(prev => [...prev, { name: '', quantity: 0, unit: 'g' }]);
-  const removeIngredientRow = (index: number) => setIngredients(prev => prev.filter((_, i) => i !== index));
+  const removeIngredientRow = (index: number) => {
+    setIngredients(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const NUMERIC_INGREDIENT_FIELDS = ['quantity', 'batchAmount', 'batchYield'];
   const updateIngredientRow = (index: number, field: keyof ProductIngredient, value: string) => {
-    setIngredients(prev => prev.map((ing, i) =>
-      i === index ? { ...ing, [field]: field === 'quantity' ? (parseFloat(value) || 0) : value } : ing
-    ));
+    setIngredients(prev => prev.map((ing, i) => {
+      if (i !== index) return ing;
+      const isNumeric = NUMERIC_INGREDIENT_FIELDS.includes(field as string);
+      const updated = { ...ing, [field]: isNumeric ? (parseFloat(value) || 0) : value } as ProductIngredient;
+      // Batch mode derives the per-unit quantity from amount ÷ yield so the admin
+      // never has to do that division herself
+      if (field === 'batchAmount' || field === 'batchYield') {
+        if (updated.batchYield) updated.quantity = (updated.batchAmount || 0) / updated.batchYield;
+      }
+      // Typing a name that matches an existing master ingredient locks onto its
+      // id and unit (one default unit per ingredient — no per-recipe override).
+      // Typing something new clears ingredientId so the Unit field becomes
+      // editable again, ready to define a brand-new ingredient on save.
+      if (field === 'name') {
+        const match = masterIngredients.find(mi => normalizeIngredientName(mi.name) === normalizeIngredientName(value));
+        updated.ingredientId = match?.id;
+        if (match) updated.unit = match.unit;
+      }
+      return updated;
+    }));
+  };
+
+  // Batch mode is inferred from the presence of batchAmount/batchYield rather than
+  // a separate stored flag, so switching back to "per unit" just drops those fields
+  const setIngredientMode = (index: number, mode: 'unit' | 'batch') => {
+    setIngredients(prev => prev.map((ing, i) => {
+      if (i !== index) return ing;
+      if (mode === 'batch') {
+        return ing.batchAmount !== undefined ? ing : { ...ing, batchAmount: ing.quantity || 0, batchYield: 1 };
+      }
+      const { batchAmount, batchYield, ...rest } = ing;
+      return rest;
+    }));
   };
 
   const handleSaveProduct = async () => {
@@ -150,8 +200,34 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
     // Only keep completed ingredient rows
     const cleanIngredients = ingredients.filter(ing => ing.name.trim() && ing.quantity > 0);
 
+    // Resolve each row to a master ingredient, creating a new one if the typed
+    // name doesn't match anything (locks in the unit chosen for it here as its
+    // default going forward). Rows already matched to an existing ingredient
+    // (ingredientId set) are left untouched — their unit is not editable.
+    const newlyCreated: Ingredient[] = [];
+    const resolvedIngredients: ProductIngredient[] = [];
+    for (const ing of cleanIngredients) {
+      let ingredientId = ing.ingredientId;
+      if (!ingredientId) {
+        const existing = masterIngredients.find(mi => normalizeIngredientName(mi.name) === normalizeIngredientName(ing.name))
+          || newlyCreated.find(mi => normalizeIngredientName(mi.name) === normalizeIngredientName(ing.name));
+        if (existing) {
+          ingredientId = existing.id;
+        } else {
+          ingredientId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+          const newIngredient: Ingredient = { id: ingredientId, name: ing.name.trim(), unit: ing.unit || 'g' };
+          await saveIngredient(newIngredient);
+          newlyCreated.push(newIngredient);
+        }
+      }
+      resolvedIngredients.push({ ...ing, ingredientId, name: ing.name.trim() });
+    }
+    if (newlyCreated.length > 0) {
+      setMasterIngredients(prev => [...prev, ...newlyCreated]);
+    }
+
     if (editingProduct) {
-      const updated: Product = { ...editingProduct, ...formData, price, prepDays, ingredients: cleanIngredients };
+      const updated: Product = { ...editingProduct, ...formData, price, prepDays, ingredients: resolvedIngredients };
       await saveProduct(updated);
       setProducts(prev => prev.map(p => p.id === editingProduct.id ? updated : p));
       toast.success('Product updated successfully!');
@@ -161,7 +237,7 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
         ...formData,
         price,
         prepDays,
-        ingredients: cleanIngredients,
+        ingredients: resolvedIngredients,
       };
       await saveProduct(newProduct);
       setProducts(prev => [...prev, newProduct]);
@@ -188,6 +264,27 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
     setImagePreview(product.image);
     setIsDialogOpen(true);
   };
+
+  // Unit is read-only once a row is matched to an existing master ingredient
+  // (one default unit per ingredient); only a brand-new ingredient lets the
+  // admin pick its unit, which then locks in for every future recipe.
+  const renderUnitField = (ing: ProductIngredient, index: number) => (
+    <div className="space-y-1">
+      <Label className="text-sm text-gray-600">Unit</Label>
+      {ing.ingredientId ? (
+        <div className="h-12 text-base flex items-center px-3 bg-gray-100 border border-gray-200 rounded-md text-gray-700">
+          {ing.unit}
+        </div>
+      ) : (
+        <Select value={ing.unit || 'g'} onValueChange={(value) => updateIngredientRow(index, 'unit', value)}>
+          <SelectTrigger className="h-12 text-base"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {SUPPORTED_UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      )}
+    </div>
+  );
 
   const confirmDeleteProduct = async () => {
     if (!productToDelete) return;
@@ -294,13 +391,18 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
               <div className="space-y-3 p-4 bg-gray-50 rounded-lg border">
                 <div>
                   <Label className="flex items-center gap-2"><Wheat className="w-4 h-4 text-orange-600" />Ingredients per {formData.unit || 'unit'}</Label>
-                  <p className="text-xs text-gray-500 mt-1">Used by Ingredient Planning to calculate shopping needs from upcoming orders</p>
+                  <p className="text-xs text-gray-500 mt-1">Used by Ingredient Planning to calculate shopping needs. Pick an existing ingredient or type a new one.</p>
                 </div>
+                <datalist id={INGREDIENT_DATALIST_ID}>
+                  {masterIngredients.map(mi => <option key={mi.id} value={mi.name} />)}
+                </datalist>
                 {ingredients.length === 0 ? (
                   <p className="text-sm text-gray-500">No ingredients added yet.</p>
                 ) : (
                   <div className="space-y-3">
-                    {ingredients.map((ing, index) => (
+                    {ingredients.map((ing, index) => {
+                      const isBatchMode = ing.batchAmount !== undefined || ing.batchYield !== undefined;
+                      return (
                       <div key={index} className="bg-white border border-gray-200 rounded-lg p-3 space-y-3">
                         <div className="flex items-center justify-between gap-2">
                           <Label htmlFor={`ing-name-${index}`} className="text-sm text-gray-600">Ingredient {index + 1}</Label>
@@ -308,19 +410,51 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
                             <X className="w-4 h-4 mr-1" />Remove
                           </Button>
                         </div>
-                        <Input id={`ing-name-${index}`} value={ing.name} onChange={(e) => updateIngredientRow(index, 'name', e.target.value)} placeholder="e.g. Glutinous rice" className="h-12 text-base" />
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1">
-                            <Label htmlFor={`ing-qty-${index}`} className="text-sm text-gray-600">Amount</Label>
-                            <Input id={`ing-qty-${index}`} type="number" inputMode="decimal" value={ing.quantity || ''} onChange={(e) => updateIngredientRow(index, 'quantity', e.target.value)} placeholder="e.g. 50" min="0" step="0.1" className="h-12 text-base" />
-                          </div>
-                          <div className="space-y-1">
-                            <Label htmlFor={`ing-unit-${index}`} className="text-sm text-gray-600">Unit</Label>
-                            <Input id={`ing-unit-${index}`} value={ing.unit} onChange={(e) => updateIngredientRow(index, 'unit', e.target.value)} placeholder="g / ml / pieces" className="h-12 text-base" />
-                          </div>
+                        <Input id={`ing-name-${index}`} list={INGREDIENT_DATALIST_ID} value={ing.name} onChange={(e) => updateIngredientRow(index, 'name', e.target.value)} placeholder="e.g. Glutinous rice" className="h-12 text-base" />
+                        <p className="text-xs text-gray-500">
+                          {ing.ingredientId
+                            ? `Matched to an existing ingredient — unit is locked to ${ing.unit || '—'}.`
+                            : 'New ingredient — choose its unit below (applies to every future recipe using it).'}
+                        </p>
+
+                        <div className="flex gap-2">
+                          <button type="button" onClick={() => setIngredientMode(index, 'unit')} className={`flex-1 h-9 rounded-md text-sm border transition-colors ${!isBatchMode ? 'bg-orange-50 border-orange-300 text-orange-700 font-semibold' : 'border-gray-200 text-gray-500'}`}>
+                            Per unit
+                          </button>
+                          <button type="button" onClick={() => setIngredientMode(index, 'batch')} className={`flex-1 h-9 rounded-md text-sm border transition-colors ${isBatchMode ? 'bg-orange-50 border-orange-300 text-orange-700 font-semibold' : 'border-gray-200 text-gray-500'}`}>
+                            Per batch
+                          </button>
                         </div>
+
+                        {isBatchMode ? (
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <Label htmlFor={`ing-batchamt-${index}`} className="text-sm text-gray-600">Batch amount</Label>
+                              <Input id={`ing-batchamt-${index}`} type="number" inputMode="decimal" value={ing.batchAmount || ''} onChange={(e) => updateIngredientRow(index, 'batchAmount', e.target.value)} placeholder="e.g. 1000" min="0" step="0.1" className="h-12 text-base" />
+                            </div>
+                            <div className="space-y-1">
+                              <Label htmlFor={`ing-batchyield-${index}`} className="text-sm text-gray-600">Yields how many units</Label>
+                              <Input id={`ing-batchyield-${index}`} type="number" inputMode="decimal" value={ing.batchYield || ''} onChange={(e) => updateIngredientRow(index, 'batchYield', e.target.value)} placeholder="e.g. 20" min="0" step="1" className="h-12 text-base" />
+                            </div>
+                            <div className="col-span-2">{renderUnitField(ing, index)}</div>
+                            <p className="col-span-2 text-xs text-gray-500">
+                              {ing.batchYield
+                                ? `= ${(ing.quantity || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${ing.unit || ''} per unit`
+                                : 'Enter how many units this batch makes to calculate the amount per unit'}
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <Label htmlFor={`ing-qty-${index}`} className="text-sm text-gray-600">Amount</Label>
+                              <Input id={`ing-qty-${index}`} type="number" inputMode="decimal" value={ing.quantity || ''} onChange={(e) => updateIngredientRow(index, 'quantity', e.target.value)} placeholder="e.g. 50" min="0" step="0.1" className="h-12 text-base" />
+                            </div>
+                            {renderUnitField(ing, index)}
+                          </div>
+                        )}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
                 <Button type="button" variant="outline" onClick={addIngredientRow} className="w-full h-12 border-dashed border-2 text-gray-700">

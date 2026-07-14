@@ -1,7 +1,7 @@
 import { db } from '../../firebase';
 import {
   collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
-  query, where, addDoc,
+  query, where,
 } from 'firebase/firestore';
 
 export const ADMIN_EMAILS = ['yikbryan0528work@gmail.com', 'ksl_joyce@yahoo.com'];
@@ -19,6 +19,25 @@ export async function saveProduct(product: any): Promise<void> {
 
 export async function deleteProduct(id: string): Promise<void> {
   await deleteDoc(doc(db, 'products', id));
+}
+
+// ─── Ingredients (master list) ──────────────────────────────────────────────
+
+export async function getIngredients(): Promise<any[]> {
+  const snap = await getDocs(collection(db, 'ingredients'));
+  return snap.docs.map(d => d.data());
+}
+
+export async function saveIngredient(ingredient: any): Promise<void> {
+  await setDoc(doc(db, 'ingredients', ingredient.id), ingredient);
+}
+
+export async function updateIngredientPurchased(id: string, purchased: number): Promise<void> {
+  await updateDoc(doc(db, 'ingredients', id), { purchased });
+}
+
+export async function deleteIngredient(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'ingredients', id));
 }
 
 export async function seedDefaultProducts(): Promise<void> {

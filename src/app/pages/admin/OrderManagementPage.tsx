@@ -73,7 +73,10 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
 
   // Orders arrive already paid and numbered (submitOrder assigns the
   // finalized number server-side), so status moves only forward through the
-  // fulfilment steps — there is no approve/reject step anymore.
+  // fulfilment steps — there is no approve/reject step anymore. Ingredient
+  // Planning's Required total already drops this order's items once its
+  // status leaves the "still needs preparation" set, so no separate stock
+  // deduction is needed here.
   const updateStatus = async (orderId: string, newStatus: string) => {
     if (updatingOrderId) return;
     setUpdatingOrderId(orderId);
@@ -143,9 +146,9 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
                   <SelectValue placeholder="Sort orders" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="newest">Sort: Recently placed</SelectItem>
-                  <SelectItem value="deliverySoonest">Sort: Delivery date — soonest</SelectItem>
-                  <SelectItem value="deliveryLatest">Sort: Delivery date — latest</SelectItem>
+                  <SelectItem value="newest">Recently placed</SelectItem>
+                  <SelectItem value="deliverySoonest">Delivery date — soonest</SelectItem>
+                  <SelectItem value="deliveryLatest">Delivery date — latest</SelectItem>
                 </SelectContent>
               </Select>
               <Badge variant="outline" className="text-base px-4 py-2 shrink-0">{filteredOrders.length} orders</Badge>
