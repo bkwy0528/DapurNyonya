@@ -102,22 +102,20 @@ export default function ProductOrderPage({ user }: ProductOrderPageProps) {
           <CardContent className="p-6 space-y-6">
             <FormSection>
               <Label className="text-lg">Quantity</Label>
-              <div className="flex items-center space-x-4">
-                <Button variant="outline" size="icon" onClick={() => handleQuantityChange(-1)} disabled={quantity <= 1} className="h-14 w-14 border-2"><Minus className="w-5 h-5" /></Button>
-                <div className="flex-1 text-center">
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    aria-label="Quantity"
-                    value={quantity === 0 ? '' : quantity}
-                    onChange={(e) => handleQuantityInput(e.target.value)}
-                    onBlur={() => { if (quantity < 1) setQuantity(1); }}
-                    className="w-full max-w-32 mx-auto block text-center text-4xl font-bold text-gray-900 border-2 border-gray-200 rounded-lg py-1 focus:border-orange-400 focus:outline-none"
-                  />
-                  <div className="text-sm text-gray-500 mt-1">{product.unit} — tap the number to type an amount</div>
-                </div>
-                <Button variant="outline" size="icon" onClick={() => handleQuantityChange(1)} className="h-14 w-14 border-2"><Plus className="w-5 h-5" /></Button>
+              <div className="flex items-center justify-center space-x-4">
+                <Button variant="outline" size="icon" onClick={() => handleQuantityChange(-1)} disabled={quantity <= 1} className="h-14 w-14 shrink-0 border-2"><Minus className="w-5 h-5" /></Button>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  aria-label="Quantity"
+                  value={quantity === 0 ? '' : quantity}
+                  onChange={(e) => handleQuantityInput(e.target.value)}
+                  onBlur={() => { if (quantity < 1) setQuantity(1); }}
+                  className="w-full max-w-32 text-center text-4xl font-bold text-gray-900 border-2 border-gray-200 rounded-lg py-1 focus:border-orange-400 focus:outline-none"
+                />
+                <Button variant="outline" size="icon" onClick={() => handleQuantityChange(1)} className="h-14 w-14 shrink-0 border-2"><Plus className="w-5 h-5" /></Button>
               </div>
+              <div className="text-sm text-gray-500 mt-1 text-center">{product.unit} — tap the number to type an amount</div>
             </FormSection>
 
             <FormSection>
