@@ -65,6 +65,29 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Production batches (batch/MOQ ordering): anyone can read (customers see
+    // live progress before ordering), only admin writes. currentQuantity/
+    // orderCount/batchStatus are actually maintained by the createBatchPreOrder/
+    // expireBatchPayments/closeExpiredProductionDates Cloud Functions (Admin
+    // SDK, bypasses this rule) — this just lets the admin configure Open/Closed
+    // and Min/Max directly, same shape as dailyLimits.
+    match /productionBatches/{batchId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Batch pre-orders: customers can read only their own, admin can read/write
+    // all. Never created directly by a client — createBatchPreOrder (Admin SDK)
+    // recomputes the price from the live product catalog and checks batch
+    // capacity/MOQ inside a transaction, mirroring how submitOrder is the sole
+    // writer of orders/. A batchOrder graduates into a real orders/ doc (via
+    // submitBatchOrderPayment) once paid; it is never itself payable-in-place.
+    match /batchOrders/{orderId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.customerId == request.auth.uid);
+      allow create: if false;
+      allow update, delete: if isAdmin();
+    }
+
     // User profiles: users can read/write their own, admin can read all
     match /users/{uid} {
       allow read, write: if isSignedIn() && request.auth.uid == uid;

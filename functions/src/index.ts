@@ -1,4 +1,6 @@
 import { onCall, HttpsError, onRequest } from 'firebase-functions/v2/https';
+import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { expireBatchPaymentsCore, closeExpiredProductionDatesCore } from './batchLifecycle';
 import { logger } from 'firebase-functions';
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
@@ -8,7 +10,7 @@ import type { Request } from 'firebase-functions/v2/https';
 initializeApp();
 const db = getFirestore();
 
-const TOYYIBPAY_BASE_URL = 'https://toyyibpay.com';
+const TOYYIBPAY_BASE_URL = 'https://dev.toyyibpay.com';
 
 // No Firestore order exists yet at bill-creation time — the order is only recorded
 // client-side after ToyyibPay confirms success on the return redirect (see
@@ -371,5 +373,347 @@ export const submitOrder = onCall(
     });
 
     return { orderId, total };
+  }
+);
+
+// ─── Batch/MOQ production ordering ────────────────────────────────────────────
+//
+// Products flagged `batchTracked` skip the flow above entirely. A customer's
+// pre-order lives in `batchOrders` (waiting → awaiting_payment → paid/expired/
+// cancelled) and never touches `orders` until it's actually paid — the
+// opposite of the normal flow's "no order exists until paid" invariant, since
+// here a pre-order must be able to exist, accumulate, and even die (MOQ never
+// reached) before any money moves. `createToyyibPayBill`/`toyyibpayCallback`
+// above are reused as-is for the payment step; only the pre-order and
+// graduation-to-`orders` logic is new. See src/app/utils/batchOrders.ts for
+// the shared client-side types this mirrors.
+
+function malaysiaTodayYMD(): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kuala_Lumpur', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date());
+  const get = (type: string) => parts.find((p) => p.type === type)?.value;
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
+interface CreateBatchPreOrderRequest {
+  productId: string;
+  productionDate: string; // YYYY-MM-DD, identifies the productionBatches doc together with productId
+  quantity: number;
+  notes?: string;
+  deliveryMethod: 'pickup' | 'delivery';
+  deliveryAddress?: string;
+  postalCode?: string;
+  contactPhone: string;
+  specialInstructions?: string;
+  customerName: string;
+}
+
+export const createBatchPreOrder = onCall(
+  { region: 'asia-southeast1' },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Must be signed in to place a pre-order.');
+    }
+    const customerId = request.auth.uid;
+    const data = request.data as CreateBatchPreOrderRequest;
+
+    if (!data.productId || !data.productionDate || !(data.quantity > 0)) {
+      throw new HttpsError('invalid-argument', 'Invalid pre-order request.');
+    }
+    if (data.deliveryMethod !== 'pickup' && data.deliveryMethod !== 'delivery') {
+      throw new HttpsError('invalid-argument', 'Invalid delivery method.');
+    }
+    if (data.deliveryMethod === 'delivery' && !data.deliveryAddress) {
+      throw new HttpsError('invalid-argument', 'Missing delivery address.');
+    }
+    if (!data.contactPhone) {
+      throw new HttpsError('invalid-argument', 'Missing contact phone.');
+    }
+
+    const productSnap = await db.collection('products').doc(data.productId).get();
+    if (!productSnap.exists) {
+      throw new HttpsError('failed-precondition', 'Product no longer exists.');
+    }
+    const product = productSnap.data() as any;
+    if (!product.batchTracked) {
+      throw new HttpsError('failed-precondition', 'This product is not open for batch pre-orders.');
+    }
+    if (product.available === false) {
+      throw new HttpsError('failed-precondition', `${product.name} is no longer available.`);
+    }
+
+    const batchId = `${data.productId}_${data.productionDate}`;
+    const batchRef = db.collection('productionBatches').doc(batchId);
+    const settingsRef = db.collection('settings').doc('business');
+    const batchOrderRef = db.collection('batchOrders').doc();
+
+    const { justConfirmed, effectiveDeadline } = await db.runTransaction(async (tx) => {
+      const [batchSnap, settingsSnap] = await Promise.all([tx.get(batchRef), tx.get(settingsRef)]);
+      if (!batchSnap.exists) {
+        throw new HttpsError('failed-precondition', 'This production date is not open.');
+      }
+      const batch = batchSnap.data() as any;
+      if (batch.status !== 'open' || batch.batchStatus === 'cancelled') {
+        throw new HttpsError('failed-precondition', 'This production date is no longer accepting pre-orders.');
+      }
+      const wasConfirmed = batch.batchStatus === 'confirmed';
+      if (wasConfirmed && batch.paymentDeadline && new Date(batch.paymentDeadline).getTime() < Date.now()) {
+        throw new HttpsError('failed-precondition', 'The payment window for this production date has closed.');
+      }
+
+      const currentQuantity = Number(batch.currentQuantity) || 0;
+      const maxQuantity = Number(batch.maxQuantity) || 0;
+      if (maxQuantity > 0 && currentQuantity + data.quantity > maxQuantity) {
+        throw new HttpsError('failed-precondition', `Only ${Math.max(0, maxQuantity - currentQuantity)} left for this date. Please reduce the quantity or choose another date.`);
+      }
+
+      const newQuantity = currentQuantity + data.quantity;
+      const minQuantity = Number(batch.minQuantity) || 0;
+      const nowConfirms = !wasConfirmed && minQuantity > 0 && newQuantity >= minQuantity;
+
+      const windowHours = Number((settingsSnap.data() as any)?.batchPaymentWindowHours) || 48;
+      const nowIso = new Date().toISOString();
+      const newDeadlineIso = new Date(Date.now() + windowHours * 60 * 60 * 1000).toISOString();
+
+      const batchUpdate: Record<string, any> = {
+        currentQuantity: newQuantity,
+        orderCount: FieldValue.increment(1),
+      };
+      if (nowConfirms) {
+        batchUpdate.batchStatus = 'confirmed';
+        batchUpdate.confirmedAt = nowIso;
+        batchUpdate.paymentDeadline = newDeadlineIso;
+      }
+      tx.set(batchRef, batchUpdate, { merge: true });
+
+      const deadline = nowConfirms ? newDeadlineIso : (wasConfirmed ? (batch.paymentDeadline || null) : null);
+      const initialStatus: 'waiting' | 'awaiting_payment' = (nowConfirms || wasConfirmed) ? 'awaiting_payment' : 'waiting';
+
+      tx.set(batchOrderRef, {
+        id: batchOrderRef.id,
+        customerId,
+        customerName: data.customerName || '',
+        customerPhone: data.contactPhone,
+        batchId,
+        productionDate: data.productionDate,
+        productId: data.productId,
+        productName: product.name,
+        price: product.price,
+        unit: product.unit,
+        image: product.image || '',
+        quantity: data.quantity,
+        notes: data.notes || '',
+        deliveryMethod: data.deliveryMethod,
+        deliveryAddress: data.deliveryMethod === 'delivery' ? data.deliveryAddress : 'Pickup',
+        postalCode: data.deliveryMethod === 'delivery' ? (data.postalCode || '') : '',
+        specialInstructions: data.specialInstructions || '',
+        createdAt: nowIso,
+        status: initialStatus,
+        paymentDeadline: deadline,
+        billCode: null,
+        paymentMethod: '',
+        paymentNote: '',
+        orderId: null,
+      });
+
+      return { justConfirmed: nowConfirms, effectiveDeadline: newDeadlineIso };
+    });
+
+    if (justConfirmed) {
+      // Everyone who joined this batch before this pre-order tipped it over
+      // MOQ is still sitting at 'waiting' — fan the confirmation out to them.
+      // This pre-order's own doc was already written as 'awaiting_payment'
+      // above, so it's excluded from this query by construction (it isn't
+      // committed as 'waiting' at any point another read could observe).
+      const waitingSnap = await db.collection('batchOrders')
+        .where('batchId', '==', batchId)
+        .where('status', '==', 'waiting')
+        .get();
+      if (!waitingSnap.empty) {
+        const fanOut = db.batch();
+        waitingSnap.docs.forEach((docSnap) => {
+          fanOut.update(docSnap.ref, { status: 'awaiting_payment', paymentDeadline: effectiveDeadline });
+        });
+        await fanOut.commit();
+      }
+    }
+
+    return { batchOrderId: batchOrderRef.id, batchId };
+  }
+);
+
+interface SubmitBatchOrderPaymentRequest {
+  batchOrderId: string;
+  billCode: string;
+  paymentMethod: 'tng' | 'fpx';
+  paymentNote?: string;
+}
+
+export const submitBatchOrderPayment = onCall(
+  { region: 'asia-southeast1' },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Must be signed in to pay for a pre-order.');
+    }
+    const customerId = request.auth.uid;
+    const data = request.data as SubmitBatchOrderPaymentRequest;
+    if (!data.batchOrderId || !data.billCode) {
+      throw new HttpsError('invalid-argument', 'Missing payment details.');
+    }
+    if (data.paymentMethod !== 'tng' && data.paymentMethod !== 'fpx') {
+      throw new HttpsError('invalid-argument', 'Invalid payment method.');
+    }
+
+    const batchOrderRef = db.collection('batchOrders').doc(data.batchOrderId);
+    const batchOrderSnap = await batchOrderRef.get();
+    if (!batchOrderSnap.exists) {
+      throw new HttpsError('not-found', 'Pre-order not found.');
+    }
+    const batchOrder = batchOrderSnap.data() as any;
+    if (batchOrder.customerId !== customerId) {
+      throw new HttpsError('permission-denied', 'This pre-order does not belong to you.');
+    }
+
+    // Idempotency: a reload after a previous successful submit returns the
+    // already-created order instead of creating a second one.
+    if (batchOrder.status === 'paid' && batchOrder.orderId) {
+      const existing = await db.collection('orders').doc(batchOrder.orderId).get();
+      if (existing.exists) {
+        return { orderId: batchOrder.orderId, total: (existing.data() as any).total };
+      }
+    }
+
+    if (batchOrder.status !== 'awaiting_payment') {
+      throw new HttpsError('failed-precondition', 'This pre-order is not currently open for payment.');
+    }
+    if (batchOrder.paymentDeadline && new Date(batchOrder.paymentDeadline).getTime() < Date.now()) {
+      throw new HttpsError('failed-precondition', 'The payment window for this pre-order has expired.');
+    }
+
+    // Recompute the price from the live product catalog — never trust
+    // whatever was stored on the pre-order for the amount actually charged.
+    const productSnap = await db.collection('products').doc(batchOrder.productId).get();
+    if (!productSnap.exists) {
+      throw new HttpsError('failed-precondition', 'Product no longer exists.');
+    }
+    const product = productSnap.data() as any;
+    const total = product.price * batchOrder.quantity;
+
+    const confirmationSnap = await db.collection('paymentConfirmations').doc(data.billCode).get();
+    if (!confirmationSnap.exists) {
+      throw new HttpsError('failed-precondition', 'Payment has not been confirmed yet. Please wait a moment and try again.');
+    }
+    const confirmation = confirmationSnap.data() as any;
+    if (confirmation.status !== '1') {
+      throw new HttpsError('failed-precondition', 'Payment was not successful.');
+    }
+    const expectedCents = Math.round(total * 100);
+    if (confirmation.amount !== expectedCents) {
+      logger.error('ToyyibPay paid amount does not match the recomputed batch order total', {
+        billCode: data.billCode, expectedCents, paidAmount: confirmation.amount,
+      });
+      throw new HttpsError('failed-precondition', 'Paid amount does not match the order total.');
+    }
+
+    const transactionId: string | null = confirmation.refno || null;
+
+    const orderId = await db.runTransaction(async (tx) => {
+      // Re-read inside the transaction to guard against a second concurrent
+      // submit for the same pre-order (e.g. two tabs) both reaching this far.
+      const freshSnap = await tx.get(batchOrderRef);
+      const fresh = freshSnap.data() as any;
+      if (fresh.status === 'paid' && fresh.orderId) {
+        return fresh.orderId as string;
+      }
+      if (fresh.status !== 'awaiting_payment') {
+        throw new HttpsError('failed-precondition', 'This pre-order is not currently open for payment.');
+      }
+
+      const newOrderRef = db.collection('orders').doc();
+      const dateKey = getDateKey();
+      const counterRef = db.collection('counters').doc(`orders-${dateKey}`);
+      const counterSnap = await tx.get(counterRef);
+      const next = (counterSnap.exists ? (counterSnap.data() as any).count : 0) + 1;
+      tx.set(counterRef, { count: next });
+      const finalizedNumber = generateFinalOrderNumber(next);
+
+      // Written in the exact same shape submitOrder() produces above, so
+      // every existing order-consuming page (Order Management, Ingredient
+      // Planning, Analytics, Customer Order Tracking) handles it unchanged.
+      tx.set(newOrderRef, {
+        id: newOrderRef.id,
+        customerId,
+        customerName: fresh.customerName || '',
+        customerPhone: fresh.customerPhone,
+        items: [{
+          productId: fresh.productId,
+          name: product.name,
+          price: product.price,
+          unit: product.unit,
+          image: product.image || '',
+          quantity: fresh.quantity,
+          notes: fresh.notes || '',
+        }],
+        subtotal: total,
+        deliveryCharge: 0,
+        total,
+        deliveryMethod: fresh.deliveryMethod,
+        deliveryAddress: fresh.deliveryAddress,
+        postalCode: fresh.postalCode,
+        specialInstructions: fresh.specialInstructions,
+        paymentMethod: data.paymentMethod,
+        paymentNote: data.paymentNote || '',
+        status: 'Order Received',
+        paymentStatus: 'paid',
+        transactionId,
+        billCode: data.billCode,
+        paidAt: new Date().toISOString(),
+        orderDate: new Date().toISOString(),
+        deliveryDate: fresh.productionDate,
+        finalizedNumber,
+        clientRequestId: `batch-${data.batchOrderId}`,
+      });
+
+      tx.update(batchOrderRef, {
+        status: 'paid',
+        orderId: newOrderRef.id,
+        billCode: data.billCode,
+        paymentMethod: data.paymentMethod,
+        paymentNote: data.paymentNote || '',
+      });
+
+      return newOrderRef.id;
+    });
+
+    return { orderId, total };
+  }
+);
+
+// Runs every 15 minutes: releases the reserved quantity for any pre-order
+// whose payment window closed without paying. Already-paid orders have
+// graduated into `orders` by this point and are never touched here — once
+// paid, always honored, regardless of what happens to the rest of the batch.
+export const expireBatchPayments = onSchedule(
+  { region: 'asia-southeast1', schedule: 'every 15 minutes', timeZone: 'Asia/Kuala_Lumpur' },
+  async () => {
+    const released = await expireBatchPaymentsCore(db, new Date().toISOString());
+    if (released > 0) logger.info(`expireBatchPayments: released ${released} expired pre-order(s).`);
+  }
+);
+
+// Runs once daily: any batch whose production date has arrived without
+// reaching its minimum quantity is cancelled outright, along with every
+// pre-order still waiting on it — no admin action required. A batch that
+// already reached 'confirmed' is governed by its payment deadline
+// (expireBatchPayments above), not the production date, so it's excluded
+// here even once that date has passed.
+export const closeExpiredProductionDates = onSchedule(
+  { region: 'asia-southeast1', schedule: 'every day 01:00', timeZone: 'Asia/Kuala_Lumpur' },
+  async () => {
+    const cancelled = await closeExpiredProductionDatesCore(db, malaysiaTodayYMD());
+    if (cancelled > 0) {
+      logger.info(`closeExpiredProductionDates: cancelled ${cancelled} unmet batch(es).`);
+    }
   }
 );

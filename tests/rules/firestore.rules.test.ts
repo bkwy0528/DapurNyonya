@@ -264,6 +264,61 @@ describe('settings and dailyLimits', () => {
   });
 });
 
+describe('productionBatches', () => {
+  it('lets anyone, including unauthenticated visitors, read a batch', async () => {
+    await seed('productionBatches/chang_2026-07-18', { productId: 'chang', minQuantity: 20, currentQuantity: 5 });
+    await assertSucceeds(getDoc(doc(anon(), 'productionBatches/chang_2026-07-18')));
+  });
+
+  it('blocks a customer from writing a batch, including inflating its own progress', async () => {
+    await seed('productionBatches/chang_2026-07-18', { productId: 'chang', minQuantity: 20, currentQuantity: 5 });
+    await assertFails(setDoc(doc(customer('cust-1'), 'productionBatches/chang_2026-07-18'), { currentQuantity: 999 }));
+    await assertFails(updateDoc(doc(customer('cust-1'), 'productionBatches/chang_2026-07-18'), { batchStatus: 'confirmed' }));
+  });
+
+  it('lets the admin create and edit a batch', async () => {
+    await assertSucceeds(setDoc(doc(admin(), 'productionBatches/chang_2026-07-18'), {
+      id: 'chang_2026-07-18', productId: 'chang', productionDate: '2026-07-18',
+      status: 'open', minQuantity: 20, maxQuantity: 60, currentQuantity: 0, orderCount: 0, batchStatus: 'collecting',
+    }));
+  });
+});
+
+describe('batchOrders', () => {
+  it('blocks a customer from creating a pre-order directly, even with correct ownership', async () => {
+    await assertFails(setDoc(doc(customer('cust-1'), 'batchOrders/bo1'), {
+      customerId: 'cust-1', batchId: 'chang_2026-07-18', quantity: 5, status: 'waiting',
+    }));
+  });
+
+  it('blocks the admin from creating a pre-order directly too — even they go through createBatchPreOrder', async () => {
+    await assertFails(setDoc(doc(admin(), 'batchOrders/bo1'), {
+      customerId: 'cust-1', batchId: 'chang_2026-07-18', quantity: 5, status: 'waiting',
+    }));
+  });
+
+  it('lets a customer read their own pre-order but not someone else\'s', async () => {
+    await seed('batchOrders/bo1', { customerId: 'cust-1', batchId: 'chang_2026-07-18', status: 'waiting' });
+    await assertSucceeds(getDoc(doc(customer('cust-1'), 'batchOrders/bo1')));
+    await assertFails(getDoc(doc(customer('cust-2'), 'batchOrders/bo1')));
+  });
+
+  it('lets the admin read any pre-order', async () => {
+    await seed('batchOrders/bo1', { customerId: 'cust-1', batchId: 'chang_2026-07-18', status: 'waiting' });
+    await assertSucceeds(getDoc(doc(admin(), 'batchOrders/bo1')));
+  });
+
+  it('blocks a customer from updating their own pre-order, e.g. self-marking it paid', async () => {
+    await seed('batchOrders/bo1', { customerId: 'cust-1', batchId: 'chang_2026-07-18', status: 'awaiting_payment' });
+    await assertFails(updateDoc(doc(customer('cust-1'), 'batchOrders/bo1'), { status: 'paid' }));
+  });
+
+  it('lets the admin update a pre-order', async () => {
+    await seed('batchOrders/bo1', { customerId: 'cust-1', batchId: 'chang_2026-07-18', status: 'awaiting_payment' });
+    await assertSucceeds(updateDoc(doc(admin(), 'batchOrders/bo1'), { status: 'cancelled' }));
+  });
+});
+
 describe('counters', () => {
   // Every order gets its finalized number assigned server-side in submitOrder
   // — customers no longer need (or get) any access; admin keeps it for manual fixes.
