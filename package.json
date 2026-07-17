@@ -13,6 +13,7 @@
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "test:rules": "firebase emulators:exec --only firestore \"vitest run --config vitest.rules.config.ts\"",
+    "test:integration": "firebase emulators:exec --only firestore \"vitest run --config vitest.integration.config.ts\"",
     "test:e2e": "firebase emulators:exec --only firestore,auth,functions \"playwright test\""
   },
   "dependencies": {
