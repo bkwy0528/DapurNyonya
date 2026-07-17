@@ -17,11 +17,13 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import CustomerHomePage from './pages/customer/CustomerHomePage';
 import ProductDetailPage from './pages/customer/ProductDetailPage';
 import ProductOrderPage from './pages/customer/ProductOrderPage';
+import BatchProductPage from './pages/customer/BatchProductPage';
 import CustomerOrderTrackingPage from './pages/customer/CustomerOrderTrackingPage';
 import ProfilePage from './pages/ProfilePage';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import OrderManagementPage from './pages/admin/OrderManagementPage';
 import ProductionSchedulePage from './pages/admin/ProductionSchedulePage';
+import ProductionCalendarPage from './pages/admin/ProductionCalendarPage';
 import IngredientEstimationPage from './pages/admin/IngredientEstimationPage';
 import AdminSettingsPage from './pages/admin/AdminSettingsPage';
 import ProductManagementPage from './pages/admin/ProductManagementPage';
@@ -78,6 +80,7 @@ function AppRoutes({ user, setUser, handleLogout, handleProfileUpdate }: AppRout
               items never requires an account; only checkout does (gated inside CartPage). */}
           <Route path="/customer/product/:productId" element={<ProductDetailPage user={user} />} />
           <Route path="/customer/order/:productId" element={<ProductOrderPage user={user} />} />
+          <Route path="/customer/batch-order/:productId" element={<BatchProductPage user={user} />} />
           <Route path="/customer/cart" element={<CartPage user={user} />} />
 
           {/* Customer Routes */}
@@ -109,6 +112,7 @@ function AppRoutes({ user, setUser, handleLogout, handleProfileUpdate }: AppRout
                   <Route path="dashboard" element={<AdminDashboard user={user} />} />
                   <Route path="orders" element={<OrderManagementPage user={user} />} />
                   <Route path="schedule" element={<ProductionSchedulePage user={user} />} />
+                  <Route path="production-calendar" element={<ProductionCalendarPage user={user} />} />
                   <Route path="ingredients" element={<IngredientEstimationPage user={user} />} />
                   <Route path="settings" element={<AdminSettingsPage user={user} />} />
                   <Route path="products" element={<ProductManagementPage user={user} />} />

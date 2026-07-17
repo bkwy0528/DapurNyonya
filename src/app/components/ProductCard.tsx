@@ -27,7 +27,9 @@ export default function ProductCard({ product, orderTo, orderLabel = 'Order This
               <p className="text-gray-600">{product.description}</p>
             </div>
             {product.available && (
-              <Badge className="status-badge--available ml-3">Pre-Order</Badge>
+              // "Pre-Order" is reserved for batch products (matches their
+              // "Pre-Order This" button); everything else is made to order.
+              <Badge className="status-badge--available ml-3">{product.batchTracked ? 'Pre-Order' : 'Made to Order'}</Badge>
             )}
           </div>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mt-4 gap-3">

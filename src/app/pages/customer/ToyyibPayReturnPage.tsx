@@ -5,7 +5,7 @@ import { Button } from '../../components/ui/button';
 import { CheckCircle2, Clock, XCircle, AlarmClockOff } from 'lucide-react';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { useCart } from '../../context/CartContext';
-import { submitOrder } from '../../utils/submitOrder';
+import { submitOrder, submitBatchOrderPayment } from '../../utils/submitOrder';
 import { User } from '../../App';
 
 interface ToyyibPayReturnPageProps {
@@ -34,32 +34,41 @@ export default function ToyyibPayReturnPage({ user }: ToyyibPayReturnPageProps) 
           if (!raw || !billCode) { setOutcome('lost'); return; }
           const pendingOrder = JSON.parse(raw);
 
-          // submitOrder() is the actual authority here — it only creates the
-          // order once it sees toyyibpayCallback's own server-recorded
-          // confirmation for this exact bill (never this page's URL params,
-          // which are just a client-side hint of what to try). It's also
-          // idempotent on both clientRequestId and billCode, so a reload or
-          // back-navigation landing here again after a previous run already
-          // succeeded just returns that same order instead of duplicating it
-          // or losing track of a payment that went through.
-          await submitOrder({
-            clientRequestId: pendingOrder.clientRequestId,
-            items: (pendingOrder.items || []).map((item: any) => ({
-              productId: item.productId,
-              quantity: item.quantity,
-              notes: item.notes,
-            })),
-            deliveryMethod: pendingOrder.deliveryMethod,
-            deliveryAddress: pendingOrder.deliveryAddress,
-            postalCode: pendingOrder.postalCode,
-            contactPhone: pendingOrder.customerPhone,
-            specialInstructions: pendingOrder.specialInstructions,
-            paymentMethod: pendingOrder.paymentMethod,
-            paymentNote: pendingOrder.paymentNote,
-            deliveryDate: pendingOrder.deliveryDate,
-            customerName: pendingOrder.customerName,
-            billCode,
-          });
+          // submitOrder()/submitBatchOrderPayment() are the actual authority
+          // here — they only write once they see toyyibpayCallback's own
+          // server-recorded confirmation for this exact bill (never this
+          // page's URL params, which are just a client-side hint of what to
+          // try). Both are idempotent, so a reload or back-navigation landing
+          // here again after a previous run already succeeded just returns
+          // that same order instead of duplicating it or losing track of a
+          // payment that went through.
+          if (pendingOrder.kind === 'batchOrder') {
+            await submitBatchOrderPayment({
+              batchOrderId: pendingOrder.batchOrderId,
+              paymentMethod: pendingOrder.paymentMethod,
+              paymentNote: pendingOrder.paymentNote,
+              billCode,
+            });
+          } else {
+            await submitOrder({
+              clientRequestId: pendingOrder.clientRequestId,
+              items: (pendingOrder.items || []).map((item: any) => ({
+                productId: item.productId,
+                quantity: item.quantity,
+                notes: item.notes,
+              })),
+              deliveryMethod: pendingOrder.deliveryMethod,
+              deliveryAddress: pendingOrder.deliveryAddress,
+              postalCode: pendingOrder.postalCode,
+              contactPhone: pendingOrder.customerPhone,
+              specialInstructions: pendingOrder.specialInstructions,
+              paymentMethod: pendingOrder.paymentMethod,
+              paymentNote: pendingOrder.paymentNote,
+              deliveryDate: pendingOrder.deliveryDate,
+              customerName: pendingOrder.customerName,
+              billCode,
+            });
+          }
           // Only removed once the order write has actually succeeded — removing it
           // beforehand meant a reload during the write would lose the recovery data
           // without any guarantee the order had actually been saved.

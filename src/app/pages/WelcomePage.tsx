@@ -50,7 +50,8 @@ export default function WelcomePage() {
                 key={product.id}
                 product={product}
                 detailsTo={`/customer/product/${product.id}`}
-                orderTo={`/customer/order/${product.id}`}
+                orderTo={product.batchTracked ? `/customer/batch-order/${product.id}` : `/customer/order/${product.id}`}
+                orderLabel={product.batchTracked ? 'Pre-Order This' : 'Order This'}
               />
             ))}
           </div>

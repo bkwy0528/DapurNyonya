@@ -1,7 +1,7 @@
 import { db } from '../../firebase';
 import {
   collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
-  query, where,
+  query, where, writeBatch, increment,
 } from 'firebase/firestore';
 
 export const ADMIN_EMAILS = ['yikbryan0528work@gmail.com', 'ksl_joyce@yahoo.com'];
@@ -113,6 +113,69 @@ export async function getSettings(): Promise<any> {
 
 export async function saveSettings(settings: any): Promise<void> {
   await setDoc(doc(db, 'settings', 'business'), settings);
+}
+
+// ─── Production Batches (batch/MOQ ordering) ────────────────────────────────
+//
+// Admin config (status/minQuantity/maxQuantity) is written directly from the
+// Production Calendar page, same as dailyLimits. currentQuantity/orderCount/
+// batchStatus/confirmedAt/paymentDeadline are only ever written by the
+// createBatchPreOrder/expireBatchPayments/closeExpiredProductionDates Cloud
+// Functions (Admin SDK) — never by this client-side writer.
+
+export async function getProductionBatches(): Promise<any[]> {
+  const snap = await getDocs(collection(db, 'productionBatches'));
+  return snap.docs.map(d => d.data());
+}
+
+export async function getProductionBatchesForProduct(productId: string): Promise<any[]> {
+  const q = query(collection(db, 'productionBatches'), where('productId', '==', productId));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => d.data());
+}
+
+// Creates a new batch or overwrites an existing one's admin-configurable
+// fields (status/minQuantity/maxQuantity) — callers must preserve the
+// server-maintained counters (currentQuantity/orderCount/batchStatus/etc.)
+// by spreading the existing doc first when editing.
+export async function saveProductionBatch(batch: any): Promise<void> {
+  await setDoc(doc(db, 'productionBatches', batch.id), batch);
+}
+
+// ─── Batch Orders (customer pre-orders against a production batch) ─────────
+
+export async function getBatchOrdersByCustomer(customerId: string): Promise<any[]> {
+  const q = query(collection(db, 'batchOrders'), where('customerId', '==', customerId));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => d.data());
+}
+
+export async function getBatchOrdersForBatch(batchId: string): Promise<any[]> {
+  const q = query(collection(db, 'batchOrders'), where('batchId', '==', batchId));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => d.data());
+}
+
+// Admin-only (enforced by firestore.rules: batchOrders update + productionBatches
+// write both require isAdmin()). Cancels a single not-yet-paid pre-order and
+// releases its reserved quantity back to the batch in one atomic write, so a
+// concurrent pre-order can immediately use the freed slots. Mirrors what
+// expireBatchPayments does server-side on deadline expiry; like there, a
+// 'confirmed' batch stays confirmed even if this drops it below its minimum —
+// payment is already open for everyone else.
+export async function adminCancelBatchOrder(batchOrder: any): Promise<void> {
+  const batch = writeBatch(db);
+  batch.update(doc(db, 'batchOrders', batchOrder.id), { status: 'cancelled' });
+  batch.update(doc(db, 'productionBatches', batchOrder.batchId), {
+    currentQuantity: increment(-batchOrder.quantity),
+    orderCount: increment(-1),
+  });
+  await batch.commit();
+}
+
+export async function getBatchOrderById(id: string): Promise<any | null> {
+  const snap = await getDoc(doc(db, 'batchOrders', id));
+  return snap.exists() ? snap.data() : null;
 }
 
 // ─── Daily Limits ────────────────────────────────────────────────────────────

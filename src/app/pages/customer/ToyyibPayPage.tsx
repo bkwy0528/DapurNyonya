@@ -24,7 +24,7 @@ export default function ToyyibPayPage({ user }: ToyyibPayPageProps) {
     started.current = true;
 
     const raw = sessionStorage.getItem('pendingOrder');
-    if (!raw) { navigate('/customer/cart'); return; }
+    if (!raw) { navigate('/customer/home'); return; }
     const pendingOrder = JSON.parse(raw);
 
     (async () => {

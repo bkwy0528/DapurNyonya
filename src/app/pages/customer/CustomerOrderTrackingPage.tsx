@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router';
+import { useNavigate, Link } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Progress } from '../../components/ui/progress';
-import { ArrowLeft, Package, Clock, Truck, AlertCircle, Receipt, Home as HomeIcon, XCircle } from 'lucide-react';
+import { ArrowLeft, Package, Clock, Truck, AlertCircle, Receipt, Home as HomeIcon, XCircle, Users, Smartphone, Building2, CheckCircle2 } from 'lucide-react';
 import { User } from '../../App';
-import { getOrdersByCustomer } from '../../utils/db';
+import { getOrdersByCustomer, getBatchOrdersByCustomer, getProductionBatches } from '../../utils/db';
 import { getStatusStyle } from '../../utils/statusStyles';
 import { onImageError } from '../../utils/imageFallback';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { Button } from '../../components/ui/button';
+import { BatchOrder, ProductionBatch, getRemainingToMinimum } from '../../utils/batchOrders';
 
 interface CustomerOrderTrackingPageProps {
   user: User;
@@ -31,9 +32,19 @@ const getStatusSteps = (deliveryMethod: string) =>
         { label: 'Ready for Pickup', icon: Truck },
       ];
 
+const paymentOptions = [
+  { value: 'tng' as const, Icon: Smartphone, label: 'DuitNow QR / E-Wallet' },
+  { value: 'fpx' as const, Icon: Building2, label: 'FPX Online Banking' },
+];
+
 export default function CustomerOrderTrackingPage({ user }: CustomerOrderTrackingPageProps) {
+  const navigate = useNavigate();
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [preOrders, setPreOrders] = useState<BatchOrder[]>([]);
+  const [batchesById, setBatchesById] = useState<Record<string, ProductionBatch>>({});
+  const [payingId, setPayingId] = useState<string | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<'tng' | 'fpx' | ''>('');
 
   const loadOrders = () => {
     getOrdersByCustomer(user.id)
@@ -43,7 +54,57 @@ export default function CustomerOrderTrackingPage({ user }: CustomerOrderTrackin
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { loadOrders(); }, [user.id]);
+  // Cards needing the customer's action come first; dead cards (expired/
+  // cancelled) sink to the bottom and disappear a week after their production
+  // date so the list doesn't accumulate clutter forever.
+  const PRE_ORDER_SORT: Record<string, number> = { awaiting_payment: 0, waiting: 1, expired: 2, cancelled: 3 };
+  const FINISHED_VISIBLE_DAYS = 7;
+
+  const loadPreOrders = () => {
+    Promise.all([getBatchOrdersByCustomer(user.id), getProductionBatches()])
+      .then(([customerBatchOrders, allBatches]) => {
+        // Paid pre-orders already show up as a real order below — only the
+        // still-in-flight states need a card here.
+        const hideBefore = new Date();
+        hideBefore.setDate(hideBefore.getDate() - FINISHED_VISIBLE_DAYS);
+        const active = (customerBatchOrders as BatchOrder[])
+          .filter(bo => bo.status !== 'paid')
+          .filter(bo => {
+            if (bo.status !== 'expired' && bo.status !== 'cancelled') return true;
+            return new Date(`${bo.productionDate}T00:00:00`) >= hideBefore;
+          })
+          .sort((a, b) =>
+            (PRE_ORDER_SORT[a.status] ?? 9) - (PRE_ORDER_SORT[b.status] ?? 9)
+            || new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+        setPreOrders(active);
+        const map: Record<string, ProductionBatch> = {};
+        (allBatches as ProductionBatch[]).forEach(b => { map[b.id] = b; });
+        setBatchesById(map);
+      })
+      .catch(() => { /* pre-orders are a supplementary section — a failed read must not block the paid-order list */ });
+  };
+
+  useEffect(() => { loadOrders(); loadPreOrders(); }, [user.id]);
+
+  const openPayNow = (batchOrderId: string) => {
+    setPayingId(payingId === batchOrderId ? null : batchOrderId);
+    setPaymentMethod('');
+  };
+
+  const confirmPayNow = (preOrder: BatchOrder) => {
+    if (!paymentMethod) return;
+    sessionStorage.setItem('pendingOrder', JSON.stringify({
+      kind: 'batchOrder',
+      batchOrderId: preOrder.id,
+      amount: preOrder.price * preOrder.quantity,
+      total: preOrder.price * preOrder.quantity,
+      customerName: preOrder.customerName,
+      customerPhone: preOrder.customerPhone,
+      paymentMethod,
+      paymentNote: '',
+    }));
+    navigate('/customer/payment');
+  };
 
   const getStatusProgress = (status: string, deliveryMethod: string) => {
     const isDelivery = deliveryMethod === 'delivery';
@@ -76,7 +137,91 @@ export default function CustomerOrderTrackingPage({ user }: CustomerOrderTrackin
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+        {preOrders.length > 0 && (
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold text-gray-900">Your Pre-Orders</h2>
+            {preOrders.map((preOrder) => {
+              const batch = batchesById[preOrder.batchId];
+              const remaining = batch ? getRemainingToMinimum(batch) : 0;
+              const progressPct = batch && batch.minQuantity > 0 ? Math.min(100, (batch.currentQuantity / batch.minQuantity) * 100) : 0;
+              const isPaying = payingId === preOrder.id;
+              return (
+                <Card key={preOrder.id} className="overflow-hidden border-orange-200">
+                  <CardHeader className="bg-orange-50">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-lg">{preOrder.productName} × {preOrder.quantity}</CardTitle>
+                      <Badge className={
+                        preOrder.status === 'awaiting_payment' ? 'bg-green-100 text-green-800'
+                          : preOrder.status === 'expired' ? 'bg-gray-200 text-gray-700'
+                          : preOrder.status === 'cancelled' ? 'bg-gray-200 text-gray-700'
+                          : 'bg-amber-100 text-amber-800'
+                      }>
+                        {preOrder.status === 'awaiting_payment' ? 'Payment Open'
+                          : preOrder.status === 'waiting' ? 'Waiting for Minimum Quantity'
+                          : preOrder.status === 'expired' ? 'Payment Window Expired'
+                          : 'Cancelled — Minimum Not Reached'}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-2">
+                      Production date: {new Date(`${preOrder.productionDate}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                    </p>
+                  </CardHeader>
+                  <CardContent className="p-6 space-y-4">
+                    {batch && preOrder.status === 'waiting' && (
+                      <div className="space-y-2">
+                        <Progress value={progressPct} className="h-2" />
+                        <div className="flex items-center justify-between text-sm text-gray-600">
+                          <span>{batch.currentQuantity} / {batch.minQuantity} {preOrder.unit}{remaining > 0 ? ` · need ${remaining} more` : ''}</span>
+                          <span className="flex items-center gap-1"><Users className="w-4 h-4" />{batch.orderCount} joined</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {preOrder.status === 'awaiting_payment' && (
+                      <div className="space-y-3">
+                        <p className="text-sm text-green-800 bg-green-50 border border-green-200 rounded-lg p-3">
+                          Minimum quantity reached! Pay by{' '}
+                          {preOrder.paymentDeadline ? new Date(preOrder.paymentDeadline).toLocaleString('en-MY', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : 'the deadline'}
+                          {' '}to keep your spot — RM {(preOrder.price * preOrder.quantity).toFixed(2)}.
+                        </p>
+                        {!isPaying ? (
+                          <Button onClick={() => openPayNow(preOrder.id)} className="w-full success-button h-12">Pay Now</Button>
+                        ) : (
+                          <div className="space-y-3 p-4 bg-gray-50 rounded-lg border">
+                            <p className="font-semibold text-gray-900">Choose a payment method</p>
+                            {paymentOptions.map(({ value, Icon, label }) => (
+                              <div
+                                key={value}
+                                onClick={() => setPaymentMethod(value)}
+                                className={`flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition-all select-none ${paymentMethod === value ? 'border-orange-500 bg-orange-50' : 'border-gray-200 bg-white hover:border-orange-300'}`}
+                              >
+                                <Icon className="w-5 h-5 text-gray-600" />
+                                <span className="flex-1 font-medium text-gray-800">{label}</span>
+                                {paymentMethod === value && <CheckCircle2 className="w-5 h-5 text-orange-500" />}
+                              </div>
+                            ))}
+                            <Button onClick={() => confirmPayNow(preOrder)} disabled={!paymentMethod} className="w-full brand-button h-12">
+                              Continue to Payment
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {preOrder.status === 'expired' && (
+                      <p className="text-sm text-gray-600">The payment window closed before you paid, so this pre-order was released. Feel free to pre-order again if a spot is still open.</p>
+                    )}
+                    {preOrder.status === 'cancelled' && (
+                      <p className="text-sm text-gray-600">This production date didn't reach its minimum quantity, so it was cancelled. No payment was ever collected.</p>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+
         {orders.length === 0 ? (
           <Card>
             <CardContent className="p-12 text-center">
