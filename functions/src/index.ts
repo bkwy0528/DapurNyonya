@@ -1,14 +1,23 @@
 import { onCall, HttpsError, onRequest } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import { expireBatchPaymentsCore, closeExpiredProductionDatesCore } from './batchLifecycle';
+import { sendPushToUserCore, sendPushToUsersCore } from './pushNotifications';
 import { logger } from 'firebase-functions';
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getMessaging } from 'firebase-admin/messaging';
 import Busboy from '@fastify/busboy';
 import type { Request } from 'firebase-functions/v2/https';
 
 initializeApp();
 const db = getFirestore();
+const messaging = getMessaging();
+
+// Same allowlist as firestore.rules' isAdmin() — there's no custom-claims
+// setup in this project, admin identity is just this hardcoded email list,
+// duplicated here because Cloud Functions can't reference Firestore rules.
+const ADMIN_EMAILS = ['yikbryan0528work@gmail.com', 'ksl_joyce@yahoo.com'];
 
 const TOYYIBPAY_BASE_URL = 'https://dev.toyyibpay.com';
 
@@ -537,6 +546,21 @@ export const createBatchPreOrder = onCall(
         });
         await fanOut.commit();
       }
+
+      // The customer who just tipped it over is excluded from waitingSnap
+      // above (their own doc went straight to 'awaiting_payment'), so they're
+      // added back here to also get the confirmation push.
+      const deadlineLabel = new Date(effectiveDeadline).toLocaleString('en-MY', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+      const customerIds = [customerId, ...waitingSnap.docs.map((docSnap) => (docSnap.data() as any).customerId as string)];
+      try {
+        await sendPushToUsersCore(db, messaging, customerIds, {
+          title: 'Minimum quantity reached!',
+          body: `${product.name} is confirmed for production — pay by ${deadlineLabel} to keep your spot.`,
+          url: '/customer/orders',
+        });
+      } catch (err) {
+        logger.error('Failed to send batch-confirmed push notifications', { batchId, err });
+      }
     }
 
     return { batchOrderId: batchOrderRef.id, batchId };
@@ -697,7 +721,7 @@ export const submitBatchOrderPayment = onCall(
 export const expireBatchPayments = onSchedule(
   { region: 'asia-southeast1', schedule: 'every 15 minutes', timeZone: 'Asia/Kuala_Lumpur' },
   async () => {
-    const released = await expireBatchPaymentsCore(db, new Date().toISOString());
+    const released = await expireBatchPaymentsCore(db, new Date().toISOString(), messaging);
     if (released > 0) logger.info(`expireBatchPayments: released ${released} expired pre-order(s).`);
   }
 );
@@ -711,9 +735,56 @@ export const expireBatchPayments = onSchedule(
 export const closeExpiredProductionDates = onSchedule(
   { region: 'asia-southeast1', schedule: 'every day 01:00', timeZone: 'Asia/Kuala_Lumpur' },
   async () => {
-    const cancelled = await closeExpiredProductionDatesCore(db, malaysiaTodayYMD());
+    const cancelled = await closeExpiredProductionDatesCore(db, malaysiaTodayYMD(), messaging);
     if (cancelled > 0) {
       logger.info(`closeExpiredProductionDates: cancelled ${cancelled} unmet batch(es).`);
     }
+  }
+);
+
+// Fires on every admin status update to an order (OrderManagementPage writes
+// directly to Firestore, not through a callable, so a Firestore trigger is
+// the only hook point here). Skips 'Order Received' — the customer just
+// triggered that themselves by paying, they don't need to be told about it.
+const NOTIFIABLE_STATUSES = new Set(['In Preparation', 'Out for Delivery', 'Ready for Pickup', 'Delivered']);
+
+export const onOrderStatusChange = onDocumentUpdated(
+  { document: 'orders/{orderId}', region: 'asia-southeast1' },
+  async (event) => {
+    const before = event.data?.before.data() as any;
+    const after = event.data?.after.data() as any;
+    if (!before || !after || before.status === after.status || !NOTIFIABLE_STATUSES.has(after.status)) {
+      return;
+    }
+    try {
+      await sendPushToUserCore(db, messaging, after.customerId, {
+        title: 'Order update',
+        body: `${after.finalizedNumber || 'Your order'} is now "${after.status}".`,
+        url: '/customer/orders',
+      });
+    } catch (err) {
+      logger.error('Failed to send order-status push notification', { orderId: event.params.orderId, err });
+    }
+  }
+);
+
+// Admin-only: sends a fixed test push to the caller's own stored tokens, so
+// an admin can visually confirm the whole pipeline (permission -> token ->
+// send -> OS notification) actually works on their own device.
+export const sendTestNotificationToSelf = onCall(
+  { region: 'asia-southeast1' },
+  async (request) => {
+    const email = request.auth?.token.email;
+    if (!email || !ADMIN_EMAILS.includes(email)) {
+      throw new HttpsError('permission-denied', 'Admin only.');
+    }
+    const result = await sendPushToUserCore(db, messaging, request.auth!.uid, {
+      title: 'Test notification',
+      body: 'If you can see this, push notifications are working!',
+    });
+    if (result.sent === 0) {
+      throw new HttpsError('failed-precondition', 'No notification tokens found for your account — enable notifications first.');
+    }
+    return result;
   }
 );

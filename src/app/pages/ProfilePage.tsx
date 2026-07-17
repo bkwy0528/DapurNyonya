@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -6,11 +6,13 @@ import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { ArrowLeft, User as UserIcon, Camera, Save } from 'lucide-react';
+import { Switch } from '../components/ui/switch';
+import { ArrowLeft, User as UserIcon, Camera, Save, Bell } from 'lucide-react';
 import { toast } from 'sonner';
 import { User } from '../App';
 import { saveUserProfile } from '../utils/db';
 import { compressImage } from '../utils/image';
+import { getNotificationSupport, registerForPush } from '../utils/notifications';
 
 interface ProfilePageProps {
   user: User;
@@ -30,6 +32,39 @@ export default function ProfilePage({ user, onLogout, onProfileUpdate }: Profile
   const [address, setAddress] = useState(user.address || '');
   const [notes, setNotes] = useState(user.notes || '');
   const [profilePicture, setProfilePicture] = useState(user.profilePicture || '');
+  const [notifSupported, setNotifSupported] = useState(true);
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission>('default');
+  const [notifBusy, setNotifBusy] = useState(false);
+
+  useEffect(() => {
+    getNotificationSupport().then(setNotifSupported);
+    if ('Notification' in window) {
+      setNotifPermission(Notification.permission);
+    } else {
+      setNotifSupported(false);
+    }
+  }, []);
+
+  const handleEnableNotifications = async () => {
+    if (notifPermission === 'denied') {
+      toast.error('Notifications are blocked for this site. Enable them in your browser settings to turn this on.');
+      return;
+    }
+    setNotifBusy(true);
+    try {
+      const enabled = await registerForPush(user.id);
+      setNotifPermission('Notification' in window ? Notification.permission : 'denied');
+      if (enabled) {
+        toast.success('Notifications enabled! You\'ll be pushed order and pre-order updates.');
+      } else {
+        toast.error('Could not enable notifications — permission was not granted.');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Could not enable notifications.');
+    } finally {
+      setNotifBusy(false);
+    }
+  };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -135,6 +170,31 @@ export default function ProfilePage({ user, onLogout, onProfileUpdate }: Profile
             </div>
           </CardContent>
         </Card>
+
+        {notifSupported && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><Bell className="w-5 h-5" /> Notifications</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="font-medium text-gray-900">Order & pre-order updates</p>
+                  <p className="text-sm text-gray-600">
+                    {notifPermission === 'granted'
+                      ? 'Enabled — you\'ll be notified when a pre-order is confirmed or your order status changes.'
+                      : 'Get notified the moment a batch reaches minimum quantity or your order status changes.'}
+                  </p>
+                </div>
+                <Switch
+                  checked={notifPermission === 'granted'}
+                  disabled={notifBusy || notifPermission === 'granted'}
+                  onCheckedChange={handleEnableNotifications}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="space-y-4">
           <Button size="lg" onClick={handleSave} className="w-full h-14 text-lg brand-button">

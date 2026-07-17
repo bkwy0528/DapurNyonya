@@ -1,9 +1,17 @@
 import { getMessaging, getToken, isSupported, onMessage, type Messaging } from 'firebase/messaging';
+import { arrayUnion } from 'firebase/firestore';
 import { firebaseApp } from '../../firebase';
+import { saveUserProfile } from './db';
 
 export type ForegroundNotificationHandler = (payload: unknown) => void;
 
 const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY as string | undefined;
+
+// Registered at a scope separate from the Workbox PWA service worker
+// (public/firebase-messaging-sw.js is never auto-registered by
+// vite-plugin-pwa) so the two never fight over control of '/'.
+const PUSH_SW_URL = '/firebase-messaging-sw.js';
+const PUSH_SW_SCOPE = '/firebase-cloud-messaging-push-scope/';
 
 export async function getNotificationSupport() {
   return 'Notification' in window && 'serviceWorker' in navigator && await isSupported();
@@ -31,7 +39,20 @@ export async function requestNotificationToken() {
     return null;
   }
 
-  return getToken(messaging, { vapidKey });
+  const serviceWorkerRegistration = await navigator.serviceWorker.register(PUSH_SW_URL, { scope: PUSH_SW_SCOPE });
+  return getToken(messaging, { vapidKey, serviceWorkerRegistration });
+}
+
+// Ties together permission request -> token -> saving it on the user's
+// profile. Returns true if a token was obtained and saved, false if the
+// browser doesn't support push or the user declined the permission prompt.
+export async function registerForPush(uid: string): Promise<boolean> {
+  const token = await requestNotificationToken();
+  if (!token) {
+    return false;
+  }
+  await saveUserProfile(uid, { fcmTokens: arrayUnion(token) });
+  return true;
 }
 
 export async function listenForForegroundNotifications(handler: ForegroundNotificationHandler) {

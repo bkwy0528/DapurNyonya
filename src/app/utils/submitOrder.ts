@@ -68,3 +68,12 @@ export async function submitBatchOrderPayment(input: SubmitBatchOrderPaymentInpu
   const result = await callable(input);
   return result.data as { orderId: string; total: number };
 }
+
+// Admin-only: sends a real push to the caller's own stored tokens, so an
+// admin can visually confirm the whole pipeline actually delivers.
+export async function sendTestNotificationToSelf(): Promise<{ sent: number; pruned: number }> {
+  const functions = getFunctions(firebaseApp, 'asia-southeast1');
+  const callable = httpsCallable(functions, 'sendTestNotificationToSelf');
+  const result = await callable({});
+  return result.data as { sent: number; pruned: number };
+}

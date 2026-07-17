@@ -9,6 +9,8 @@ import { auth } from '../firebase';
 import { ADMIN_EMAILS, getAdminProfile, getUserProfile, saveUserProfile, getProducts, seedDefaultProducts } from './utils/db';
 import InstallAppPrompt from './components/pwa/InstallAppPrompt';
 import LoadingSpinner from './components/ui/LoadingSpinner';
+import { listenForForegroundNotifications } from './utils/notifications';
+import { toast } from 'sonner';
 
 // Import Pages
 import WelcomePage from './pages/WelcomePage';
@@ -61,6 +63,29 @@ function AppRoutes({ user, setUser, handleLogout, handleProfileUpdate }: AppRout
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [location.pathname]);
+  // Foreground push (the app tab is focused when a message arrives) never
+  // shows an OS notification on its own — only the background service
+  // worker does that — so it's surfaced as a toast instead.
+  useEffect(() => {
+    if (!user) return;
+    let unsubscribe: (() => void) | undefined;
+    let cancelled = false;
+    listenForForegroundNotifications((payload: any) => {
+      const title = payload?.notification?.title;
+      const body = payload?.notification?.body;
+      if (title || body) {
+        toast(title || 'DapurNyonya', { description: body });
+      }
+    }).then((unsub) => {
+      if (cancelled) unsub();
+      else unsubscribe = unsub;
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, [user?.id]);
+
   // Set by the cart page when a guest tries to checkout, so login/register can
   // send them back to the cart they built instead of the default home page.
   const from = (location.state as { from?: string } | null)?.from;

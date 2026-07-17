@@ -13,6 +13,11 @@ import { Button } from '../../components/ui/button';
 import { BatchOrder, ProductionBatch, getRemainingToMinimum } from '../../utils/batchOrders';
 import PullToRefreshIndicator from '../../components/PullToRefreshIndicator';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
+import { toast } from 'sonner';
+import { Bell, X } from 'lucide-react';
+import { registerForPush } from '../../utils/notifications';
+
+const NOTIF_NUDGE_DISMISSED_KEY = 'push-notif-nudge-dismissed';
 
 interface CustomerOrderTrackingPageProps {
   user: User;
@@ -47,6 +52,27 @@ export default function CustomerOrderTrackingPage({ user }: CustomerOrderTrackin
   const [batchesById, setBatchesById] = useState<Record<string, ProductionBatch>>({});
   const [payingId, setPayingId] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'tng' | 'fpx' | ''>('');
+  const [notifNudgeDismissed, setNotifNudgeDismissed] = useState(() => localStorage.getItem(NOTIF_NUDGE_DISMISSED_KEY) === 'true');
+  const [notifGranted, setNotifGranted] = useState(() => 'Notification' in window && Notification.permission === 'granted');
+
+  const dismissNotifNudge = () => {
+    localStorage.setItem(NOTIF_NUDGE_DISMISSED_KEY, 'true');
+    setNotifNudgeDismissed(true);
+  };
+
+  const enableNotifications = async () => {
+    try {
+      const enabled = await registerForPush(user.id);
+      if (enabled) {
+        setNotifGranted(true);
+        toast.success('Notifications enabled!');
+      } else {
+        toast.error('Notifications permission was not granted.');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Could not enable notifications.');
+    }
+  };
 
   const loadOrders = () => {
     return getOrdersByCustomer(user.id)
@@ -144,6 +170,19 @@ export default function CustomerOrderTrackingPage({ user }: CustomerOrderTrackin
       </div>
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+        {preOrders.length > 0 && !notifGranted && !notifNudgeDismissed && (
+          <div className="flex items-center gap-3 rounded-lg border border-orange-200 bg-orange-50 p-4">
+            <Bell className="h-5 w-5 shrink-0 text-orange-600" />
+            <p className="flex-1 text-sm text-orange-900">
+              Turn on notifications so you don't miss it when a pre-order's payment window opens.
+            </p>
+            <Button size="sm" className="brand-button shrink-0" onClick={enableNotifications}>Enable</Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={dismissNotifNudge} aria-label="Dismiss">
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+
         {preOrders.length > 0 && (
           <div className="space-y-4">
             <h2 className="text-xl font-semibold text-gray-900">Your Pre-Orders</h2>

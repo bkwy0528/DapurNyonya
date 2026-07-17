@@ -7,12 +7,14 @@ import { Textarea } from '../../components/ui/textarea';
 import { Button } from '../../components/ui/button';
 import { Switch } from '../../components/ui/switch';
 import { Calendar as CalendarPicker } from '../../components/ui/calendar';
-import { ArrowLeft, Settings, Save, Calendar as CalendarIcon } from 'lucide-react';
+import { ArrowLeft, Settings, Save, Calendar as CalendarIcon, Bell } from 'lucide-react';
 import { toast } from 'sonner';
 import { User } from '../../App';
 import { getSettings, saveSettings } from '../../utils/db';
 import { DEFAULT_ORDERING_RULES, normalizeOrderingRules, toLocalYMD, WEEKDAY_LABELS } from '../../utils/business';
 import { DEFAULT_BATCH_PAYMENT_WINDOW_HOURS, getBatchPaymentWindowHours } from '../../utils/batchOrders';
+import { getNotificationSupport, registerForPush } from '../../utils/notifications';
+import { sendTestNotificationToSelf } from '../../utils/submitOrder';
 
 // Monday-first display order for the collection-day picker (values are JS getDay())
 const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
@@ -21,7 +23,7 @@ interface AdminSettingsPageProps {
   user: User;
 }
 
-export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProps) {
+export default function AdminSettingsPage({ user }: AdminSettingsPageProps) {
   const [businessName, setBusinessName] = useState('Festive Delights');
   const [businessDescription, setBusinessDescription] = useState('Homemade Dumplings & Snacks');
   const [contactPhone, setContactPhone] = useState('+60 12-345 6789');
@@ -36,6 +38,46 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
   const [seasonEnd, setSeasonEnd] = useState('');
   const [openSeasonPicker, setOpenSeasonPicker] = useState<'start' | 'end' | null>(null);
   const [batchPaymentWindowHours, setBatchPaymentWindowHours] = useState(String(DEFAULT_BATCH_PAYMENT_WINDOW_HOURS));
+  const [notifSupported, setNotifSupported] = useState(true);
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission>('default');
+  const [notifBusy, setNotifBusy] = useState(false);
+  const [testSendBusy, setTestSendBusy] = useState(false);
+
+  useEffect(() => {
+    getNotificationSupport().then(setNotifSupported);
+    if ('Notification' in window) setNotifPermission(Notification.permission);
+    else setNotifSupported(false);
+  }, []);
+
+  const handleEnableNotifications = async () => {
+    if (notifPermission === 'denied') {
+      toast.error('Notifications are blocked for this site. Enable them in your browser settings first.');
+      return;
+    }
+    setNotifBusy(true);
+    try {
+      const enabled = await registerForPush(user.id);
+      setNotifPermission('Notification' in window ? Notification.permission : 'denied');
+      if (enabled) toast.success('Notifications enabled!');
+      else toast.error('Permission was not granted.');
+    } catch (err: any) {
+      toast.error(err.message || 'Could not enable notifications.');
+    } finally {
+      setNotifBusy(false);
+    }
+  };
+
+  const handleSendTestNotification = async () => {
+    setTestSendBusy(true);
+    try {
+      const result = await sendTestNotificationToSelf();
+      toast.success(`Test notification sent to ${result.sent} device(s). Check for it now.`);
+    } catch (err: any) {
+      toast.error(err.message || 'Could not send test notification.');
+    } finally {
+      setTestSendBusy(false);
+    }
+  };
 
   useEffect(() => {
     getSettings().then(s => {
@@ -304,6 +346,40 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
             </div>
           </CardContent>
         </Card>
+
+        {notifSupported && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><Bell className="w-5 h-5" /> Push Notifications</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border">
+                <div className="space-y-1">
+                  <Label className="text-base">Enable for this account</Label>
+                  <p className="text-sm text-gray-600">Required before you can send yourself a test notification below.</p>
+                </div>
+                <Switch
+                  checked={notifPermission === 'granted'}
+                  disabled={notifBusy || notifPermission === 'granted'}
+                  onCheckedChange={handleEnableNotifications}
+                />
+              </div>
+              <div className="space-y-2">
+                <Button
+                  variant="outline"
+                  onClick={handleSendTestNotification}
+                  disabled={testSendBusy || notifPermission !== 'granted'}
+                >
+                  Send test notification to myself
+                </Button>
+                <p className="text-sm text-gray-600">
+                  Sends a real push to this account's enabled device(s) — use this to confirm notifications actually
+                  arrive before relying on them for customers.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="bg-gradient-to-br from-orange-50 to-amber-50 border-orange-200">
           <CardHeader>
