@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { Toaster } from './components/ui/sonner';
 import { CartProvider } from './context/CartContext';
 import Header from './components/ui/header';
+import BottomNav from './components/ui/BottomNav';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from '../firebase';
 import { ADMIN_EMAILS, getAdminProfile, getUserProfile, saveUserProfile, getProducts, seedDefaultProducts } from './utils/db';
@@ -68,6 +69,7 @@ function AppRoutes({ user, setUser, handleLogout, handleProfileUpdate }: AppRout
   return (
     <>
       <Header user={user} onLogout={handleLogout} />
+      {user && <BottomNav role={user.role} />}
       <div className="app-shell">
         <Routes>
           {/* Public Routes */}

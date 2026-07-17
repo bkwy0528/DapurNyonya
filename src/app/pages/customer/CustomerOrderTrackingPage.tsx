@@ -11,6 +11,8 @@ import { onImageError } from '../../utils/imageFallback';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { Button } from '../../components/ui/button';
 import { BatchOrder, ProductionBatch, getRemainingToMinimum } from '../../utils/batchOrders';
+import PullToRefreshIndicator from '../../components/PullToRefreshIndicator';
+import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 
 interface CustomerOrderTrackingPageProps {
   user: User;
@@ -47,7 +49,7 @@ export default function CustomerOrderTrackingPage({ user }: CustomerOrderTrackin
   const [paymentMethod, setPaymentMethod] = useState<'tng' | 'fpx' | ''>('');
 
   const loadOrders = () => {
-    getOrdersByCustomer(user.id)
+    return getOrdersByCustomer(user.id)
       .then(userOrders => {
         setOrders([...userOrders].sort((a, b) => new Date(b.orderDate || 0).getTime() - new Date(a.orderDate || 0).getTime()));
       })
@@ -61,7 +63,7 @@ export default function CustomerOrderTrackingPage({ user }: CustomerOrderTrackin
   const FINISHED_VISIBLE_DAYS = 7;
 
   const loadPreOrders = () => {
-    Promise.all([getBatchOrdersByCustomer(user.id), getProductionBatches()])
+    return Promise.all([getBatchOrdersByCustomer(user.id), getProductionBatches()])
       .then(([customerBatchOrders, allBatches]) => {
         // Paid pre-orders already show up as a real order below — only the
         // still-in-flight states need a card here.
@@ -85,6 +87,9 @@ export default function CustomerOrderTrackingPage({ user }: CustomerOrderTrackin
   };
 
   useEffect(() => { loadOrders(); loadPreOrders(); }, [user.id]);
+
+  const refresh = () => Promise.all([loadOrders(), loadPreOrders()]).then(() => {});
+  const { pullDistance, refreshing } = usePullToRefresh(refresh);
 
   const openPayNow = (batchOrderId: string) => {
     setPayingId(payingId === batchOrderId ? null : batchOrderId);
@@ -127,6 +132,7 @@ export default function CustomerOrderTrackingPage({ user }: CustomerOrderTrackin
 
   return (
     <div className="min-h-screen pb-24">
+      <PullToRefreshIndicator pullDistance={pullDistance} refreshing={refreshing} />
       <div className="page-hero">
         <div className="page-hero__inner">
           <Link to="/customer/home" className="page-back-link">

@@ -12,6 +12,9 @@ const Toaster = ({ ...props }: ToasterProps) => {
       className="toaster group"
       // Older users need longer to notice and read a toast
       duration={6000}
+      // Clears the fixed bottom-nav bar (only rendered < md, only when
+      // logged in) — matches .install-prompt's own bottom-24 clearance.
+      mobileOffset={{ bottom: '6rem' }}
       toastOptions={{
         style: { fontSize: "1rem" },
       }}

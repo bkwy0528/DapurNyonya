@@ -14,11 +14,24 @@ interface ProductCardProps {
 }
 
 export default function ProductCard({ product, orderTo, orderLabel = 'Order This', detailsTo }: ProductCardProps) {
+  // :active also matches ancestors of the pressed element (per the CSS
+  // spec), so this makes the whole card lift/shadow on tap too — the touch
+  // equivalent of the hover:shadow-lg/-translate-y-0.5 a mouse user sees.
+  const image = (
+    <img src={product.image} alt={product.name} onError={onImageError} loading="lazy" className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
+  );
+
   return (
-    <Card className="group overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5">
+    <Card className="group overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 active:shadow-lg active:-translate-y-0.5">
       <div className="flex flex-col sm:flex-row">
         <div className="w-full sm:w-64 aspect-[4/3] sm:self-start overflow-hidden flex-shrink-0 bg-gray-100">
-          <img src={product.image} alt={product.name} onError={onImageError} loading="lazy" className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
+          {detailsTo ? (
+            <Link to={detailsTo} className="block h-full w-full active:scale-[1.03] transition-transform duration-300" aria-label={`View details for ${product.name}`}>
+              {image}
+            </Link>
+          ) : (
+            image
+          )}
         </div>
         <div className="flex-1 p-6">
           <div className="flex items-start justify-between mb-3">

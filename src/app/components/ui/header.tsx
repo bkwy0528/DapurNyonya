@@ -1,13 +1,11 @@
 import { Link, useLocation } from 'react-router';
 import { Button } from './button';
-import { ShoppingCart, User, Menu, Package, BarChart, Calendar, Settings, House, ShoppingBag, UserCircle, Wheat, Layers } from 'lucide-react';
+import { ShoppingCart, Package, BarChart, Calendar, Settings, House, ShoppingBag, UserCircle, Wheat, Layers } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
-import { useState } from 'react';
 
 export default function Header({ user, onLogout }: { user: any; onLogout?: () => void }) {
   const { getCartCount } = useCart();
   const cartCount = getCartCount();
-  const [open, setOpen] = useState(false);
   const location = useLocation();
 
   const isActive = (path: string) => location.pathname === path;
@@ -81,48 +79,16 @@ export default function Header({ user, onLogout }: { user: any; onLogout?: () =>
             )}
 
             {user ? (
+              // Mobile has no header logout control — it lives on the Profile
+              // page instead, which the bottom nav always keeps one tap away.
               <Button variant="ghost" size="sm" onClick={onLogout} className="hidden sm:inline-flex text-gray-700">Logout</Button>
             ) : (
-              <Link to="/login" className="app-nav-link hidden sm:inline-flex">Sign in</Link>
+              // Guests have no bottom nav (it only renders once logged in),
+              // so unlike Logout this stays visible at every width.
+              <Link to="/login" className="app-nav-link">Sign in</Link>
             )}
-
-            <button aria-label="Menu" onClick={() => setOpen(!open)} className="header-icon-button md:hidden">
-              <Menu className="w-5 h-5 text-gray-700" />
-            </button>
           </div>
         </div>
-
-        {open && (
-          <div className="mobile-menu-wrap">
-            <div className="mobile-menu-panel">
-              {navItems.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <Link
-                    key={item.to}
-                    to={item.to}
-                    onClick={() => setOpen(false)}
-                    className={`mobile-nav-link ${isActive(item.to) ? 'mobile-nav-link--active' : ''}`}
-                  >
-                    <Icon className="w-4 h-4" />
-                    <span>{item.label}</span>
-                  </Link>
-                );
-              })}
-              {!user && (
-                <>
-                  <Link to="/login" onClick={() => setOpen(false)} className="mobile-nav-link">Login</Link>
-                  <Link to="/register" onClick={() => setOpen(false)} className="mobile-nav-link">Register</Link>
-                </>
-              )}
-              {user && (
-                <button onClick={() => { setOpen(false); onLogout?.(); }} className="mobile-nav-link text-left">
-                  Logout
-                </button>
-              )}
-            </div>
-          </div>
-        )}
       </div>
     </header>
   );

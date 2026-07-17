@@ -5,7 +5,8 @@ import { useStorefront } from '../hooks/useStorefront';
 import AnnouncementBanner from '../components/AnnouncementBanner';
 import ProductCard from '../components/ProductCard';
 import BusinessAboutCard from '../components/BusinessAboutCard';
-import LoadingSpinner from '../components/ui/LoadingSpinner';
+import { ProductListSkeleton } from '../components/ProductCardSkeleton';
+import Reveal from '../components/Reveal';
 
 export default function WelcomePage() {
   const { products, loading, announcement, business } = useStorefront();
@@ -42,17 +43,18 @@ export default function WelcomePage() {
         </div>
 
         {loading ? (
-          <LoadingSpinner inline />
+          <ProductListSkeleton />
         ) : (
           <div className="grid gap-6">
-            {products.map((product) => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                detailsTo={`/customer/product/${product.id}`}
-                orderTo={product.batchTracked ? `/customer/batch-order/${product.id}` : `/customer/order/${product.id}`}
-                orderLabel={product.batchTracked ? 'Pre-Order This' : 'Order This'}
-              />
+            {products.map((product, index) => (
+              <Reveal key={product.id} delayMs={Math.min(index, 8) * 60}>
+                <ProductCard
+                  product={product}
+                  detailsTo={`/customer/product/${product.id}`}
+                  orderTo={product.batchTracked ? `/customer/batch-order/${product.id}` : `/customer/order/${product.id}`}
+                  orderLabel={product.batchTracked ? 'Pre-Order This' : 'Order This'}
+                />
+              </Reveal>
             ))}
           </div>
         )}

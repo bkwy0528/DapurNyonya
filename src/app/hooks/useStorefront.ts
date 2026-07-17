@@ -22,26 +22,34 @@ export function useStorefront() {
     hours: '',
   });
 
-  useEffect(() => {
-    getProducts()
-      .then(all => setProducts(all.filter((p: any) => p.available)))
-      .finally(() => setLoading(false));
-    getSettings().then(s => {
-      if (!s) return;
-      setAnnouncement({
-        enabled: s.announcementEnabled !== false,
-        title: s.announcementTitle || 'Festive Season Orders Open!',
-        text: s.announcementText || 'Place your orders now for the upcoming celebrations. Limited slots available!',
-      });
-      setBusiness(prev => ({
-        name: s.businessName || prev.name,
-        description: s.businessDescription || prev.description,
-        phone: s.contactPhone || '',
-        email: s.contactEmail || '',
-        hours: s.operatingHours || '',
-      }));
-    });
-  }, []);
+  const load = async (showSpinner: boolean): Promise<void> => {
+    if (showSpinner) setLoading(true);
+    try {
+      await Promise.all([
+        getProducts()
+          .then(all => setProducts(all.filter((p: any) => p.available))),
+        getSettings().then(s => {
+          if (!s) return;
+          setAnnouncement({
+            enabled: s.announcementEnabled !== false,
+            title: s.announcementTitle || 'Festive Season Orders Open!',
+            text: s.announcementText || 'Place your orders now for the upcoming celebrations. Limited slots available!',
+          });
+          setBusiness(prev => ({
+            name: s.businessName || prev.name,
+            description: s.businessDescription || prev.description,
+            phone: s.contactPhone || '',
+            email: s.contactEmail || '',
+            hours: s.operatingHours || '',
+          }));
+        }),
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  return { products, loading, announcement, business };
+  useEffect(() => { load(true); }, []);
+
+  return { products, loading, announcement, business, refetch: () => load(false) };
 }
