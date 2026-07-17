@@ -46,6 +46,10 @@ interface Product {
   // Exempt from the bulk-order minimum (e.g. bottled items) — small quantities
   // of this product alone may still pick any collection date at checkout
   bulkExempt?: boolean;
+  // Batch/MOQ production: this product skips the normal cart/checkout flow
+  // entirely. Customers pre-order against an admin-opened production date
+  // (Production Calendar) and pay nothing until the minimum quantity is met.
+  batchTracked?: boolean;
   ingredients?: ProductIngredient[];
 }
 
@@ -91,6 +95,7 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
     prepDays: '3',
     available: true,
     bulkExempt: false,
+    batchTracked: false,
   });
   const [ingredients, setIngredients] = useState<ProductIngredient[]>([]);
   const [masterIngredients, setMasterIngredients] = useState<Ingredient[]>([]);
@@ -259,6 +264,7 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
       prepDays: String(product.prepDays || 3),
       available: product.available,
       bulkExempt: product.bulkExempt ?? false,
+      batchTracked: product.batchTracked ?? false,
     });
     setIngredients(product.ingredients || []);
     setImagePreview(product.image);
@@ -295,7 +301,7 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
   };
 
   const resetForm = () => {
-    setFormData({ name: '', description: '', price: '', image: '', unit: '', prepDays: '3', available: true, bulkExempt: false });
+    setFormData({ name: '', description: '', price: '', image: '', unit: '', prepDays: '3', available: true, bulkExempt: false, batchTracked: false });
     setIngredients([]);
     setImagePreview('');
     setEditingProduct(null);
@@ -478,6 +484,18 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
                 <Switch id="bulkExempt" checked={formData.bulkExempt} onCheckedChange={(checked) => setFormData(prev => ({ ...prev, bulkExempt: checked }))} />
               </div>
 
+              <div className="flex items-center justify-between gap-4 p-4 bg-gray-50 rounded-lg">
+                <div className="space-y-1">
+                  <Label htmlFor="batchTracked">Batch Production (Minimum Order Quantity)</Label>
+                  <p className="text-xs text-gray-500">
+                    This product is only made once enough customers pre-order for a specific production date.
+                    Customers won't pay until the minimum is reached — manage dates in Pre-Orders instead of the
+                    normal checkout flow. Product Management's other ordering rules above don't apply to it.
+                  </p>
+                </div>
+                <Switch id="batchTracked" checked={formData.batchTracked} onCheckedChange={(checked) => setFormData(prev => ({ ...prev, batchTracked: checked }))} />
+              </div>
+
               {duplicateNameWarning && (
                 <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
                   A product with this name already exists — sales analytics and ingredient
@@ -509,9 +527,14 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
                         <h3 className="text-xl font-semibold text-gray-900">{product.name}</h3>
                         <p className="text-gray-600 mt-1">{product.description}</p>
                       </div>
-                      <Badge className={product.available ? 'status-badge--available' : 'status-badge--unavailable'}>
-                        {product.available ? 'Available' : 'Unavailable'}
-                      </Badge>
+                      <div className="flex flex-col items-end gap-2">
+                        <Badge className={product.available ? 'status-badge--available' : 'status-badge--unavailable'}>
+                          {product.available ? 'Available' : 'Unavailable'}
+                        </Badge>
+                        {product.batchTracked && (
+                          <Badge variant="outline" className="border-orange-300 text-orange-700">Batch / MOQ</Badge>
+                        )}
+                      </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
@@ -528,7 +551,7 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
                       </div>
                       <div>
                         <p className="text-sm text-gray-600">Ordering</p>
-                        <p className="font-semibold text-gray-900">{product.bulkExempt ? 'No minimum quantity' : 'Counts toward bulk minimum'}</p>
+                        <p className="font-semibold text-gray-900">{product.batchTracked ? 'Batch pre-order (MOQ)' : product.bulkExempt ? 'No minimum quantity' : 'Counts toward bulk minimum'}</p>
                       </div>
                     </div>
                     <div className="flex flex-col sm:flex-row gap-3 pt-2">

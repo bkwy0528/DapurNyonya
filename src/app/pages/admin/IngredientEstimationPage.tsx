@@ -295,7 +295,7 @@ export default function IngredientEstimationPage({ user: _user }: IngredientEsti
               <p className="text-sm text-gray-600">
                 {manualMode
                   ? 'You can manually enter the number of products to calculate ingredient needs.'
-                  : 'Quantities are calculated from upcoming orders that still need preparation (pending, approved, or in preparation).'}
+                  : 'Quantities are calculated from upcoming paid orders that still need preparation (order received or in preparation).'}
               </p>
             </CardContent>
           </Card>

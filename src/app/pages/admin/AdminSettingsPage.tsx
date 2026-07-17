@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { User } from '../../App';
 import { getSettings, saveSettings } from '../../utils/db';
 import { DEFAULT_ORDERING_RULES, normalizeOrderingRules, toLocalYMD, WEEKDAY_LABELS } from '../../utils/business';
+import { DEFAULT_BATCH_PAYMENT_WINDOW_HOURS, getBatchPaymentWindowHours } from '../../utils/batchOrders';
 
 // Monday-first display order for the collection-day picker (values are JS getDay())
 const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
@@ -34,6 +35,7 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
   const [seasonStart, setSeasonStart] = useState('');
   const [seasonEnd, setSeasonEnd] = useState('');
   const [openSeasonPicker, setOpenSeasonPicker] = useState<'start' | 'end' | null>(null);
+  const [batchPaymentWindowHours, setBatchPaymentWindowHours] = useState(String(DEFAULT_BATCH_PAYMENT_WINDOW_HOURS));
 
   useEffect(() => {
     getSettings().then(s => {
@@ -51,6 +53,7 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
       setSmallOrderWeekdays(rules.smallOrderWeekdays);
       setSeasonStart(rules.seasonStart || '');
       setSeasonEnd(rules.seasonEnd || '');
+      setBatchPaymentWindowHours(String(getBatchPaymentWindowHours(s)));
     });
   }, []);
 
@@ -83,6 +86,11 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
       toast.error('The festive season start date must be on or before the end date');
       return;
     }
+    const paymentWindowHours = parseInt(batchPaymentWindowHours, 10);
+    if (isNaN(paymentWindowHours) || paymentWindowHours < 1) {
+      toast.error('Batch payment window must be at least 1 hour');
+      return;
+    }
     try {
       await saveSettings({
         businessName,
@@ -99,6 +107,7 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
           seasonStart: seasonStart || null,
           seasonEnd: seasonEnd || null,
         },
+        batchPaymentWindowHours: paymentWindowHours,
       });
     } catch {
       toast.error('Could not save settings. Please try again.');
@@ -275,6 +284,23 @@ export default function AdminSettingsPage({ user: _user }: AdminSettingsPageProp
                   Clear Festive Season
                 </Button>
               )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Batch Ordering</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="batchPaymentWindowHours" className="text-base">Payment Window (hours)</Label>
+              <Input id="batchPaymentWindowHours" type="number" min="1" step="1" inputMode="numeric" value={batchPaymentWindowHours} onChange={(e) => setBatchPaymentWindowHours(e.target.value)} className="h-12 text-base" />
+              <p className="text-sm text-gray-600">
+                Once a batch product (see Product Management) reaches its minimum order quantity for a production
+                date, customers get this many hours to pay before their pre-order is released. Manage production
+                dates and their Min/Max quantities in Pre-Orders.
+              </p>
             </div>
           </CardContent>
         </Card>
