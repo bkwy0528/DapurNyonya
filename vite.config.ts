@@ -60,6 +60,11 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Never serve the SPA shell for Firebase's reserved /__/* paths —
+        // signInWithPopup opens /__/auth/handler on this same Hosting origin,
+        // and the default navigate fallback was feeding it the cached app
+        // homepage instead of Google's sign-in page.
+        navigateFallbackDenylist: [/^\/__\//],
         cleanupOutdatedCaches: true,
         globPatterns: ['**/*.{html,js,css,png,svg,ico,webp,jpg,jpeg,woff,woff2}'],
         runtimeCaching: [
