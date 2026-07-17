@@ -17,6 +17,7 @@ import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { getProducts, getProductionBatchesForProduct } from '../../utils/db';
 import { createBatchPreOrder } from '../../utils/submitOrder';
 import { onImageError } from '../../utils/imageFallback';
+import { vibrate } from '../../utils/haptics';
 import { ProductionBatch, getBatchStatusLabel, getRemainingToMinimum, getRemainingCapacity } from '../../utils/batchOrders';
 
 interface BatchProductPageProps {
@@ -126,6 +127,7 @@ export default function BatchProductPage({ user }: BatchProductPageProps) {
         specialInstructions: notes,
         customerName: user.name,
       });
+      vibrate([15, 60, 15]);
       toast.success('Pre-order placed! Track its progress in My Orders.');
       navigate('/customer/tracking');
     } catch (err: any) {

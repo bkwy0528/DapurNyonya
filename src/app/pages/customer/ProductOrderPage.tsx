@@ -13,6 +13,7 @@ import FormSection from '../../components/ui/FormSection';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { getProducts } from '../../utils/db';
 import { onImageError } from '../../utils/imageFallback';
+import { vibrate } from '../../utils/haptics';
 
 interface ProductOrderPageProps {
   user: User | null;
@@ -67,6 +68,7 @@ export default function ProductOrderPage({ user }: ProductOrderPageProps) {
 
   const handleAddToCart = () => {
     addToCart({ productId: product.id, name: product.name, price: product.price, quantity: Math.max(1, quantity), image: product.image, unit: product.unit, prepDays: product.prepDays, notes });
+    vibrate();
     toast.success('Added to cart!');
     navigate('/customer/cart');
   };

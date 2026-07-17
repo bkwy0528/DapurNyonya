@@ -341,9 +341,12 @@ export default function CustomerOrderTrackingPage({ user }: CustomerOrderTrackin
                           {statusSteps.map((statusStep, index) => {
                             const Icon = statusStep.icon;
                             const isActive = index <= step;
+                            // "Current" only while genuinely in progress — the
+                            // final step at 100% is done, not pulsing.
+                            const isCurrent = index === step && progress < 100;
                             return (
                               <div key={index} className="flex flex-col items-center space-y-2">
-                                <div className={`w-12 h-12 rounded-full flex items-center justify-center ${isActive ? 'bg-gradient-to-br from-orange-500 to-amber-500 text-white' : 'bg-gray-200 text-gray-400'}`}>
+                                <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors duration-500 ${isActive ? 'bg-gradient-to-br from-orange-500 to-amber-500 text-white' : 'bg-gray-200 text-gray-400'} ${isCurrent ? 'status-step--current' : ''}`}>
                                   <Icon className="w-6 h-6" />
                                 </div>
                                 <p className={`text-xs text-center max-w-24 ${isActive ? 'text-gray-900 font-semibold' : 'text-gray-500'}`}>

@@ -6,6 +6,8 @@ import { CheckCircle2, Clock, XCircle, AlarmClockOff } from 'lucide-react';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { useCart } from '../../context/CartContext';
 import { submitOrder, submitBatchOrderPayment } from '../../utils/submitOrder';
+import { vibrate } from '../../utils/haptics';
+import ConfettiBurst from '../../components/ConfettiBurst';
 import { User } from '../../App';
 
 interface ToyyibPayReturnPageProps {
@@ -76,6 +78,7 @@ export default function ToyyibPayReturnPage({ user }: ToyyibPayReturnPageProps) 
           sessionStorage.removeItem('paymentExpiresAt');
           sessionStorage.removeItem('pendingBillCode');
           clearCart();
+          vibrate([15, 60, 15]);
           setOutcome('success');
           setTimeout(() => navigate('/customer/tracking'), 3000);
         } catch (err) {
@@ -99,6 +102,7 @@ export default function ToyyibPayReturnPage({ user }: ToyyibPayReturnPageProps) 
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6">
+      {outcome === 'success' && <ConfettiBurst />}
       <Card className="max-w-md w-full">
         <CardContent className="p-8 text-center space-y-4">
           {outcome === 'success' && (

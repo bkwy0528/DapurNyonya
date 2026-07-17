@@ -7,6 +7,8 @@ import { ArrowLeft, Plus, Minus, Trash2, ShoppingCart, LogIn } from 'lucide-reac
 import { useCart } from '../../context/CartContext';
 import { User } from '../../App';
 import { toast } from 'sonner';
+import SwipeToDelete from '../../components/SwipeToDelete';
+import { vibrate } from '../../utils/haptics';
 
 interface CartPageProps {
   user: User | null;
@@ -38,6 +40,7 @@ export default function CartPage({ user }: CartPageProps) {
   const confirmRemove = () => {
     if (itemToRemove) {
       removeFromCart(itemToRemove.productId);
+      vibrate();
       toast.success(`${itemToRemove.name} removed from cart`);
       setItemToRemove(null);
     }
@@ -108,7 +111,8 @@ export default function CartPage({ user }: CartPageProps) {
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-6">
         <div className="space-y-4">
           {cartItems.map((item) => (
-            <Card key={item.productId}>
+            <SwipeToDelete key={item.productId} onDelete={() => setItemToRemove({ productId: item.productId, name: item.name })}>
+            <Card>
               <CardContent className="p-4 sm:p-6">
                 <div className="flex flex-col sm:flex-row gap-4">
                   {/* Product Image */}
@@ -187,6 +191,7 @@ export default function CartPage({ user }: CartPageProps) {
                 </div>
               </CardContent>
             </Card>
+            </SwipeToDelete>
           ))}
         </div>
 

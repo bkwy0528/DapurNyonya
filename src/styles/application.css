@@ -295,6 +295,28 @@ button {
   }
 }
 
+/* Order-status timeline: pulses the ring of whichever step is currently in
+   progress (not yet complete), so "In Preparation" reads as active/alive
+   rather than a static icon indistinguishable from a finished step. */
+@keyframes step-pulse-ring {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(249, 115, 22, 0);
+  }
+}
+
+.status-step--current {
+  animation: step-pulse-ring 1.8s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-step--current {
+    animation: none;
+  }
+}
+
 /* Printing (receipts): only the page content itself should reach paper — the
    fixed app header (with its expensive backdrop-blur), install prompt, and
    toasts would otherwise overlay the printed output. Unlayered on purpose so
