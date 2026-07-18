@@ -1,35 +1,41 @@
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { Button } from './button';
-import { ShoppingCart, Package, BarChart, Calendar, Settings, House, ShoppingBag, UserCircle, Wheat, Layers } from 'lucide-react';
+import { ShoppingCart, ChevronDown } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
+import NotificationBell from '../NotificationBell';
+import { customerTabs, adminPrimaryTabs, adminMoreItems } from './navItems';
 
 export default function Header({ user, onLogout }: { user: any; onLogout?: () => void }) {
   const { getCartCount } = useCart();
   const cartCount = getCartCount();
   const location = useLocation();
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
 
   const isActive = (path: string) => location.pathname === path;
 
-  const customerNavItems = [
-    { to: '/customer/home', label: 'Home', icon: House },
-    { to: '/customer/tracking', label: 'Orders', icon: Package },
-    { to: '/customer/profile', label: 'Profile', icon: UserCircle },
-  ];
-
-  const adminNavItems = [
-    { to: '/admin/dashboard', label: 'Dashboard', icon: House },
-    { to: '/admin/orders', label: 'Orders', icon: ShoppingBag },
-    { to: '/admin/products', label: 'Products', icon: Package },
-    { to: '/admin/schedule', label: 'Schedule', icon: Calendar },
-    { to: '/admin/production-calendar', label: 'Pre-Orders', icon: Layers },
-    { to: '/admin/ingredients', label: 'Ingredients', icon: Wheat },
-    { to: '/admin/analytics', label: 'Analytics', icon: BarChart },
-    { to: '/admin/settings', label: 'Settings', icon: Settings },
-    { to: '/admin/profile', label: 'Profile', icon: UserCircle },
-  ];
-
-  const navItems = user?.role === 'customer' ? customerNavItems : user?.role === 'admin' ? adminNavItems : [];
+  // The desktop header mirrors the mobile bottom bar: the same primary items
+  // inline, everything else behind "More" — so the admin's nav never sprawls.
+  const navItems = user?.role === 'customer' ? customerTabs : user?.role === 'admin' ? adminPrimaryTabs : [];
+  const moreItems = user?.role === 'admin' ? adminMoreItems : [];
+  const isMoreActive = moreItems.some((item) => isActive(item.to));
   const homeLink = user?.role === 'admin' ? '/admin/dashboard' : user?.role === 'customer' ? '/customer/home' : '/';
+
+  // Close the More dropdown on outside click / Escape, like a native menu.
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') setMoreOpen(false); };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [moreOpen]);
 
   return (
     <header className="app-header">
@@ -58,6 +64,38 @@ export default function Header({ user, onLogout }: { user: any; onLogout?: () =>
                 </Link>
               );
             })}
+            {moreItems.length > 0 && (
+              <div ref={moreRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setMoreOpen(!moreOpen)}
+                  aria-haspopup="menu"
+                  aria-expanded={moreOpen}
+                  className={`app-nav-link ${isMoreActive ? 'app-nav-link--active' : ''}`}
+                >
+                  <span>More</span>
+                  <ChevronDown className={`w-4 h-4 transition-transform ${moreOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {moreOpen && (
+                  <div className="absolute right-0 top-12 z-50 w-48 rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
+                    {moreItems.map((item) => {
+                      const Icon = item.icon;
+                      return (
+                        <Link
+                          key={item.to}
+                          to={item.to}
+                          onClick={() => setMoreOpen(false)}
+                          className={`flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-orange-50 hover:text-orange-700 ${isActive(item.to) ? 'bg-orange-50 font-semibold text-orange-700' : 'text-gray-700'}`}
+                        >
+                          <Icon className="w-4 h-4" />
+                          <span>{item.label}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
             {!user && (
               <>
                 <Link to="/login" className={`app-nav-link ${isActive('/login') ? 'app-nav-link--active' : ''}`}>Login</Link>
@@ -67,6 +105,7 @@ export default function Header({ user, onLogout }: { user: any; onLogout?: () =>
           </nav>
 
           <div className="flex items-center gap-3">
+            {user && <NotificationBell userId={user.id} role={user.role} />}
             {(!user || user.role === 'customer') && (
               <Link to="/customer/cart" aria-label="Cart" className="header-icon-button relative">
                 <ShoppingCart className="w-5 h-5" />

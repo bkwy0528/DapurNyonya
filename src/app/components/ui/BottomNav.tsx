@@ -1,47 +1,8 @@
 import { Link, useLocation } from 'react-router';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { useState } from 'react';
-import {
-  House,
-  Package,
-  UserCircle,
-  ShoppingBag,
-  Wheat,
-  Calendar,
-  Layers,
-  BarChart,
-  Settings,
-  MoreHorizontal,
-  type LucideIcon,
-} from 'lucide-react';
-
-interface NavItem {
-  to: string;
-  label: string;
-  icon: LucideIcon;
-}
-
-const customerTabs: NavItem[] = [
-  { to: '/customer/home', label: 'Home', icon: House },
-  { to: '/customer/tracking', label: 'Orders', icon: Package },
-  { to: '/customer/profile', label: 'Profile', icon: UserCircle },
-];
-
-// Only 4 fit comfortably in a thumb-reachable bar; the rest live behind "More".
-const adminPrimaryTabs: NavItem[] = [
-  { to: '/admin/dashboard', label: 'Dashboard', icon: House },
-  { to: '/admin/orders', label: 'Orders', icon: ShoppingBag },
-  { to: '/admin/products', label: 'Products', icon: Package },
-  { to: '/admin/ingredients', label: 'Ingredients', icon: Wheat },
-];
-
-const adminMoreItems: NavItem[] = [
-  { to: '/admin/schedule', label: 'Schedule', icon: Calendar },
-  { to: '/admin/production-calendar', label: 'Pre-Orders', icon: Layers },
-  { to: '/admin/analytics', label: 'Analytics', icon: BarChart },
-  { to: '/admin/settings', label: 'Settings', icon: Settings },
-  { to: '/admin/profile', label: 'Profile', icon: UserCircle },
-];
+import { MoreHorizontal } from 'lucide-react';
+import { customerTabs, adminPrimaryTabs, adminMoreItems, type NavItem } from './navItems';
 
 function TabLink({ to, label, icon: Icon, active }: NavItem & { active: boolean }) {
   return (
