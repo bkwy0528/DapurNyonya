@@ -144,6 +144,13 @@ export async function saveProductionBatch(batch: any): Promise<void> {
 
 // ─── Batch Orders (customer pre-orders against a production batch) ─────────
 
+// Admin-only in practice (rules restrict non-admins to their own docs) —
+// used by the admin notification bell to derive incoming pre-order events.
+export async function getAllBatchOrders(): Promise<any[]> {
+  const snap = await getDocs(collection(db, 'batchOrders'));
+  return snap.docs.map(d => d.data());
+}
+
 export async function getBatchOrdersByCustomer(customerId: string): Promise<any[]> {
   const q = query(collection(db, 'batchOrders'), where('customerId', '==', customerId));
   const snap = await getDocs(q);

@@ -81,7 +81,9 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
     if (updatingOrderId) return;
     setUpdatingOrderId(orderId);
     try {
-      await updateOrderFields(orderId, { status: newStatus });
+      // statusUpdatedAt lets the customer's notification bell say *when* the
+      // status changed rather than falling back to when the order was placed.
+      await updateOrderFields(orderId, { status: newStatus, statusUpdatedAt: new Date().toISOString() });
       await loadOrders();
       toast.success('Order status updated!');
     } finally {
