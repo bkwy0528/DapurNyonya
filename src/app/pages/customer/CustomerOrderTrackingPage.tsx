@@ -140,7 +140,6 @@ export default function CustomerOrderTrackingPage({ user }: CustomerOrderTrackin
   const getStatusProgress = (status: string, deliveryMethod: string) => {
     const isDelivery = deliveryMethod === 'delivery';
     switch (status) {
-      case 'Pending Approval': return { step: -1, progress: 10 };
       case 'Order Received': return { step: 0, progress: isDelivery ? 25 : 33 };
       case 'In Preparation': return { step: 1, progress: isDelivery ? 50 : 66 };
       case 'Out for Delivery': return { step: 2, progress: 75 };

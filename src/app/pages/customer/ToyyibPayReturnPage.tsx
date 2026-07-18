@@ -18,7 +18,7 @@ export default function ToyyibPayReturnPage({ user }: ToyyibPayReturnPageProps) 
   const navigate = useNavigate();
   const { clearCart } = useCart();
   const [searchParams] = useSearchParams();
-  const [outcome, setOutcome] = useState<'checking' | 'success' | 'failed' | 'pending' | 'expired' | 'lost'>('checking');
+  const [outcome, setOutcome] = useState<'checking' | 'confirming' | 'success' | 'failed' | 'pending' | 'expired' | 'lost'>('checking');
   const started = useRef(false);
 
   const statusId = searchParams.get('status_id');
@@ -44,15 +44,16 @@ export default function ToyyibPayReturnPage({ user }: ToyyibPayReturnPageProps) 
           // here again after a previous run already succeeded just returns
           // that same order instead of duplicating it or losing track of a
           // payment that went through.
-          if (pendingOrder.kind === 'batchOrder') {
-            await submitBatchOrderPayment({
-              batchOrderId: pendingOrder.batchOrderId,
-              paymentMethod: pendingOrder.paymentMethod,
-              paymentNote: pendingOrder.paymentNote,
-              billCode,
-            });
-          } else {
-            await submitOrder({
+          const finalize = () => {
+            if (pendingOrder.kind === 'batchOrder') {
+              return submitBatchOrderPayment({
+                batchOrderId: pendingOrder.batchOrderId,
+                paymentMethod: pendingOrder.paymentMethod,
+                paymentNote: pendingOrder.paymentNote,
+                billCode,
+              });
+            }
+            return submitOrder({
               clientRequestId: pendingOrder.clientRequestId,
               items: (pendingOrder.items || []).map((item: any) => ({
                 productId: item.productId,
@@ -70,7 +71,33 @@ export default function ToyyibPayReturnPage({ user }: ToyyibPayReturnPageProps) 
               customerName: pendingOrder.customerName,
               billCode,
             });
+          };
+
+          // ToyyibPay's server-to-server callback can land a moment after the
+          // customer's browser returns here, so the confirmation the function
+          // needs may not exist on the first try. The function reports that as
+          // 'functions/unavailable' (transient) — retry a few times over ~12s
+          // before treating it as genuinely lost. Any other error is terminal
+          // and fails fast.
+          const MAX_ATTEMPTS = 6;
+          const RETRY_DELAY_MS = 2000;
+          let lastErr: any;
+          for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+            try {
+              await finalize();
+              lastErr = undefined;
+              break;
+            } catch (err: any) {
+              lastErr = err;
+              if (err?.code !== 'functions/unavailable') break; // terminal — stop retrying
+              if (attempt < MAX_ATTEMPTS - 1) {
+                setOutcome('confirming');
+                await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+              }
+            }
           }
+          if (lastErr) throw lastErr;
+
           // Only removed once the order write has actually succeeded — removing it
           // beforehand meant a reload during the write would lose the recovery data
           // without any guarantee the order had actually been saved.
@@ -99,6 +126,17 @@ export default function ToyyibPayReturnPage({ user }: ToyyibPayReturnPageProps) 
   }, [statusId, transactionId, navigate, clearCart, user.id]);
 
   if (outcome === 'checking') return <LoadingSpinner />;
+
+  if (outcome === 'confirming') {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-6 gap-4">
+        <LoadingSpinner />
+        <p className="text-gray-600 text-center max-w-sm">
+          Confirming your payment with the bank… this can take a few seconds. Please don't close this page.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6">

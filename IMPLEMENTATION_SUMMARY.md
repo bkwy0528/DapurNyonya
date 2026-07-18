@@ -1,243 +1,429 @@
 # DapurNyonya — Implementation Summary
 
-DapurNyonya is a Progressive Web Application (PWA) that enables a home-based food business to manage its product catalogue, customer orders, production schedule, and revenue analytics through a single system. Customers browse products, place orders for a chosen delivery or pickup date, and pay either by cash or through an online payment gateway; the business owner (a single administrator) reviews and fulfils those orders through a dedicated admin interface. The system is fully deployed on Google Firebase and is installable on mobile and desktop devices as a standalone application.
-
-This document describes the system exactly as implemented in the codebase.
+This document describes the system exactly as implemented in the codebase at the time of writing. Every collection name, field name, status string, and function name below is taken verbatim from the source code. Features that are partially implemented or intentionally absent are stated as such.
 
 ---
 
-## 1. Technology Stack
+## 1. Overview
+
+DapurNyonya is a Progressive Web Application (PWA) through which a home-based food business sells handmade festive foods. Customers browse the catalogue (no account needed), build a cart, place orders for a chosen pickup or delivery date, and pay online through the ToyyibPay gateway before any order exists in the database. A second, distinct ordering mode — batch/minimum-order-quantity (MOQ) pre-ordering — lets customers reserve units of selected products against an admin-opened production date, paying only once enough pre-orders accumulate to make the batch viable.
+
+The system has exactly two user roles: customers (any registered account) and the administrator (the business owner, identified by a hard-coded email allowlist). The administrator manages products and recipes, order fulfilment, production capacity, batch production dates, ingredient shopping lists, business settings, and revenue analytics through a dedicated admin interface in the same application.
+
+Everything runs on a single Firebase project (`dapurnyonya-9b752`) in region `asia-southeast1`: Firebase Hosting serves the built single-page application, Cloud Firestore stores all data, Firebase Authentication handles sign-in, Firebase Cloud Messaging delivers push notifications, and Cloud Functions (2nd gen, Node.js 20) hold all payment and order-creation logic plus two scheduled jobs. There is no self-managed server. The project also carries an automated test suite (Vitest unit tests, Firestore rules tests, emulator-based integration tests for the scheduled functions, and Playwright end-to-end tests), runnable against the Firebase emulators.
+
+---
+
+## 2. Technology Stack
+
+Derived from the root `package.json` and `functions/package.json`:
 
 | Layer | Technology |
 |---|---|
-| Frontend framework | React 18 with TypeScript |
+| Frontend framework | React 18.3.1 (peer dependency) with TypeScript 6 |
 | Build tool | Vite 6 |
-| Routing | React Router v7 (client-side routing, single-page application) |
-| Styling | Tailwind CSS v4 with shadcn/ui component primitives (built on Radix UI) |
-| Charting | Recharts (analytics visualisations) |
-| Authentication | Firebase Authentication (email/password and Google sign-in) |
-| Database | Cloud Firestore (NoSQL document database, region `asia-southeast1`) |
-| Server-side logic | Firebase Cloud Functions v2 (Node.js 20, TypeScript) |
-| Hosting | Firebase Hosting (serves the built SPA with a catch-all rewrite) |
-| Payment gateway | ToyyibPay (Malaysian gateway supporting FPX online banking; sandbox environment) |
-| Geocoding | Nominatim (OpenStreetMap) — converts customer addresses to coordinates |
-| Route distance | OpenRouteService Directions API — computes real driving distance for delivery fees |
-| PWA tooling | `vite-plugin-pwa` with a Workbox-generated service worker |
+| Routing | React Router 7 (`react-router`), client-side SPA routing |
+| Styling | Tailwind CSS 4 (via `@tailwindcss/vite`) with shadcn/ui-style primitives built on Radix UI; `motion` for animation |
+| Charts | Recharts 2.15 (admin analytics) |
+| Firebase client SDK | `firebase` 12.x — Auth, Firestore, Functions, Messaging |
+| Server-side logic | Firebase Cloud Functions v2 (`firebase-functions` 6, Node.js 20, TypeScript), using `firebase-admin` 13 for all Firestore access and FCM sends; `@fastify/busboy` for multipart parsing |
+| Payment gateway | ToyyibPay **sandbox** (`https://dev.toyyibpay.com`) — FPX online banking and DuitNow QR / e-wallets |
+| Push notifications | Firebase Cloud Messaging (web push, VAPID key via `VITE_FIREBASE_VAPID_KEY`) |
+| PWA tooling | `vite-plugin-pwa` 1.x with a Workbox-generated service worker, plus a separate hand-written `public/firebase-messaging-sw.js` for background push |
+| Hosting | Firebase Hosting, `dist/` with a catch-all rewrite to `/index.html` |
+| Testing | Vitest 4, `@firebase/rules-unit-testing`, Playwright, Testing Library |
 
-The entire system runs on a single Firebase project (`dapurnyonya-9b752`). There is no self-managed server; all infrastructure is serverless.
-
----
-
-## 2. Software Architecture
-
-### 2.1 Overall Design
-
-The system follows a **client-centric serverless architecture**. The React application in the browser performs all business logic — order construction, capacity checks, fee calculation, status transitions, and analytics aggregation — and reads and writes Cloud Firestore directly through the Firebase client SDK. Access control is enforced declaratively by Firestore Security Rules rather than by an intermediary API server.
-
-Cloud Functions are used only where a browser-side implementation would be impossible or insecure: specifically, as **secret-holding proxies** to two third-party HTTP APIs. The two deployed functions are:
-
-1. **`createToyyibPayBill`** (callable, authenticated) — creates a payment bill on the ToyyibPay gateway using a secret API key that never leaves the server, and returns the hosted payment URL to the browser.
-2. **`calculateDeliveryDistance`** (callable, authenticated) — given the customer's coordinates, queries the OpenRouteService Directions API (again using a server-held API key) for the driving distance from the business's kitchen location, and returns the distance in kilometres.
-
-A third HTTP endpoint, **`toyyibpayCallback`**, exists solely to satisfy the payment gateway's requirement for a reachable server callback URL; it acknowledges the request and performs no processing, because order creation is handled on the browser's return journey (Section 5.3).
-
-Notably, the Cloud Functions have **no Firestore access at all** — the `firebase-admin` SDK is not a dependency. Every database read and write in the system originates from the authenticated client and is governed by security rules.
-
-### 2.2 Frontend Structure
-
-The application is organised as follows:
-
-- **`src/app/App.tsx`** — the composition root. It subscribes to Firebase's authentication state, derives the signed-in user's role, and defines the full route table. Route protection is performed inline: the `/customer/*` route group renders only when the user's role is `customer`, and `/admin/*` only for `admin`; all other access redirects to the login page.
-- **`src/app/pages/`** — one component per screen, split into public/auth pages, `customer/` pages, and `admin/` pages (full inventory in Section 3).
-- **`src/app/components/ui/`** — reusable presentation components: shadcn/ui primitives (Button, Card, Input, Dialog, Select, Badge, etc.) plus custom shared components (`PageContainer`, `FormSection`, `LoadingSpinner`, and the global `Header` navigation bar with role-aware links and a live cart badge).
-- **`src/app/components/pwa/InstallAppPrompt.tsx`** — the "install this app" banner (Section 7).
-- **`src/app/context/CartContext.tsx`** — the shopping cart, the application's single React Context provider (Section 2.3).
-- **`src/app/utils/`** — the service layer:
-  - `db.ts` — **the single data-access module.** Every Firestore operation in the application goes through this file's functions (product CRUD, order creation and updates, counters, settings, daily limits, user and admin profiles). No page talks to Firestore directly.
-  - `business.ts` — domain helpers: password-policy validation, date-key generation, preparation-lead-time calculation, and finalized order-number formatting (`DN-YYMMDD-XX`).
-  - `delivery.ts` — delivery-fee tiers by distance, the 20 km maximum delivery radius, and a postal-code-based fallback pricer.
-  - `geocode.ts` — address-to-coordinates lookup via Nominatim.
-  - `image.ts` — client-side image compression (Section 4.1).
-  - `statusStyles.ts` — the mapping from each order status to its badge styling.
-- **`src/styles/`** — three layered stylesheets: `tailwind.css` (Tailwind v4 CSS-first configuration), `theme.css` (design tokens — colour palette, typography scale, radii — exposed as CSS custom properties and mapped into Tailwind's theme), and `application.css` (named, reusable component classes such as the app header, status badges, and info/warning boxes, kept deliberately small; one-off styling stays as inline Tailwind utilities in JSX).
-
-### 2.3 State Management and Data Flow
-
-State is deliberately kept simple:
-
-- **Authentication state** lives in the root `App` component and is passed to pages as a prop.
-- **The shopping cart** is the one piece of truly global client state, held in `CartContext` and persisted to `localStorage`, so the cart survives page reloads and browser restarts.
-- **Checkout hand-off state** (the order being built, and a payment-session expiry timestamp) is held in `sessionStorage` while the customer moves between the checkout, payment, and confirmation screens.
-- **Everything else is local component state.** Each page fetches the data it needs from `db.ts` on mount and re-fetches after its own mutations. There is no global cache, no Redux-style store, and no real-time listeners — data is read on demand.
+Note: `firebase-admin` **is** a dependency of the functions package and is used by every Cloud Function; this is a change from earlier iterations of the system, where Cloud Functions had no database access.
 
 ---
 
-## 3. Implemented Modules
+## 3. Architecture
 
-### 3.1 Authentication and User Accounts
+### 3.1 Division of responsibility
 
-- **Registration** — customers register with name, phone number, email, and a password validated against a live on-screen policy checklist (minimum length, letters and numbers). Registration creates both a Firebase Authentication account and a profile document in the `users` collection.
-- **Google sign-in** — available on both the login and registration screens. A first-time Google sign-in automatically creates the customer's profile document.
-- **Login** — a single shared login screen for both roles; after sign-in the user is routed to the customer home or admin dashboard according to their role.
-- **Password reset** — a self-service "forgot password" flow using Firebase's email-based reset.
-- **Role model** — the system has exactly one administrator, identified by email address. The same check is implemented independently in two places: in the client (to decide which interface to render) and in the Firestore Security Rules (to enforce admin-only database permissions server-side). Every other authenticated account is a customer.
-- **Profiles** — customers can edit their name, phone, address, notes, and profile photo; the administrator has an equivalent profile editor backed by a dedicated singleton document.
+The browser client (React SPA) renders all UI, performs advisory validation (form checks, date rules, capacity pre-checks), and reads Firestore directly through a single data-access module (`src/app/utils/db.ts`). It also performs the admin's direct writes (products, ingredients, settings, daily limits, batch configuration, order status updates).
 
-### 3.2 Product Catalogue (Admin)
+**Order creation, payment verification, and the batch pre-order state machine are entirely server-side**, in Cloud Functions using the Admin SDK (which bypasses security rules). Firestore security rules block clients from creating documents in `orders` and `batchOrders` outright (`allow create: if false`), so the callable functions are the only writers. The client-side wrappers in `src/app/utils/submitOrder.ts` do nothing but invoke the callables.
 
-The Product Management page provides full CRUD over the catalogue. Each product has a name, description, price, selling unit (free text, e.g. "pack of 12"), preparation lead time in days, an availability toggle, an image, and an optional **ingredient recipe** — a list of `{ingredient name, quantity, unit}` rows expressing what is needed to produce one unit of the product. The recipe feeds the Ingredient Planning module (Section 3.7). Product images can be uploaded (and are automatically compressed, Section 4.1) or supplied as an external URL. Deletion requires confirmation via a dialog.
+### 3.2 Deployed Cloud Functions
 
-### 3.3 Customer Ordering
+All functions live in `functions/src/index.ts` (with core logic for the scheduled jobs extracted to `functions/src/batchLifecycle.ts` and push helpers to `functions/src/pushNotifications.ts` for testability) and are deployed in region `asia-southeast1`.
 
-- **Home / catalogue** — customers see all available products, plus an announcement banner whose content and visibility the administrator controls from Settings.
-- **Product detail and ordering** — each product has a detail page (price, unit, preparation-time notice) and an order page where the customer sets a quantity and optional special instructions before adding to the cart.
-- **Cart** — quantities can be adjusted or items removed (with a confirmation dialog); a running subtotal is shown. The cart persists across sessions via `localStorage`.
+**`createToyyibPayBill`** — callable; requires authentication.
+1. Validates the amount and reads `TOYYIBPAY_SECRET_KEY` and `TOYYIBPAY_CATEGORY_CODE` from the functions environment (`functions/.env`; never exposed to the client or stored in Firestore).
+2. POSTs to `https://dev.toyyibpay.com/index.php/api/createBill` with `billPaymentChannel: '0'`; when the client passes `paymentMethod: 'tng'` it additionally sets `enableDuitNowQR: '1'` and `chargeDuitNowQR: '0'` (DuitNow QR is an additive toggle on top of FPX in ToyyibPay's API — the FPX tab cannot be fully excluded, and DuitNow QR must also be activated for the category on ToyyibPay's dashboard to appear).
+3. Returns `{ billCode, paymentUrl }`. **No Firestore read or write** — no order exists at bill-creation time.
 
-### 3.4 Checkout
+**`toyyibpayCallback`** — HTTP endpoint (`onRequest`). ToyyibPay calls it server-to-server when a bill's outcome is known. It parses the multipart/form-data body with busboy and **writes** (Admin SDK) a document to `paymentConfirmations/{billCode}` containing `billCode`, `status`, `refno`, `amount` (converted from ToyyibPay's decimal-Ringgit string to integer cents), `orderId`, `reason`, and a `receivedAt` server timestamp. It performs no other processing and always replies `200 OK`. This record — not anything the customer's browser reports — is what the order-creating functions later trust as proof of payment.
 
-The checkout page assembles the complete order:
+**`submitOrder`** — callable; requires authentication. The **sole creator of normal order documents**. Steps:
+1. Validates the payload (`clientRequestId`, items, `deliveryMethod` `'pickup' | 'delivery'`, `paymentMethod` `'tng' | 'fpx'` only — cash is rejected, `contactPhone`, `deliveryDate`, `billCode`).
+2. Idempotency check 1: an existing order with the same `customerId` + `clientRequestId` is returned as-is. Idempotency check 2: same for `customerId` + `billCode`.
+3. Recomputes every line item (name, price, unit, image) from the live `products` collection — client-supplied prices are never used — and fails if a product is missing or `available === false`. `deliveryCharge` is hard-coded `0`; `total = subtotal`.
+4. Reads `paymentConfirmations/{billCode}`; requires it to exist, have `status === '1'`, and have `amount` exactly equal to the recomputed total in cents.
+5. In a single Firestore transaction: re-checks the date's capacity (`dailyLimits/{deliveryDate}` with fallback to `dailyLimits/_default`; if the limit is exceeded the paid order is still **accepted** and a warning is logged — money already captured is never refused), increments the per-day sequence in `counters/orders-{YYMMDD}` to mint `finalizedNumber` (`DN-YYMMDD-NN`), writes the order with `status: 'Order Received'`, `paymentStatus: 'paid'`, `transactionId` (ToyyibPay `refno`), `paidAt`, and increments `orderCounts/{deliveryDate}`.
 
-- **Delivery date selection** — the earliest selectable date is derived from the longest preparation lead time among the cart's items, so a customer cannot order a three-day-preparation item for tomorrow.
-- **Daily capacity enforcement** — the administrator can cap the number of orders per date (Section 3.6). At order placement, checkout re-checks the chosen date's current order count against its limit and blocks the order if the date is full.
-- **Fulfilment method** — pickup (free) or delivery. For delivery, the customer enters an address and postal code, and the system computes a **distance-based delivery fee**: the address is geocoded via Nominatim, the real driving distance from the kitchen is obtained from the `calculateDeliveryDistance` Cloud Function, and a tiered fee is applied (RM5 / RM8 / RM12 / RM16 / RM20 for distances up to 3 / 6 / 10 / 15 / 20 km). Addresses beyond 20 km are out of delivery range: the fee shows as unavailable and order placement is blocked until the customer switches to pickup. If geocoding or routing fails for any reason, the system degrades gracefully to a coarser postal-code-prefix fee table so checkout never breaks. A request-sequencing guard discards stale fee responses when the customer edits the address rapidly.
-- **Payment method** — cash (on pickup/delivery), Touch 'n Go, or FPX online banking. Both online options are processed through the same ToyyibPay hosted checkout.
+**Answer to the explicit architecture question:** the order document for an online payment is created **server-side by the `submitOrder` callable**, which the customer's return page invokes after redirect — but the return-page URL parameters are only a hint of what to attempt. Payment truth comes exclusively from the `paymentConfirmations` record written by `toyyibpayCallback` (ToyyibPay's own server-to-server call). The callback endpoint itself only records the reported outcome to Firestore; the verification of status and amount happens inside `submitOrder`/`submitBatchOrderPayment` against that record.
 
-On "Place Order," the order object is written to `sessionStorage` and the customer is routed to the cash confirmation screen or the online payment flow. **No database record exists yet at this point** — the timing of order creation is a deliberate design decision described in Section 5.
+**`createBatchPreOrder`** — callable; requires authentication. Sole creator of `batchOrders` documents. Validates the product is `batchTracked` and `available`; then in a transaction on `productionBatches/{productId}_{productionDate}`: requires batch `status === 'open'` and `batchStatus !== 'cancelled'`; rejects if the batch is `'confirmed'` and its `paymentDeadline` has passed; enforces `maxQuantity` (0 = unlimited); increments `currentQuantity` and `orderCount`; if the new quantity reaches `minQuantity` for the first time, flips `batchStatus` to `'confirmed'`, stamps `confirmedAt`, and sets `paymentDeadline` = now + `settings/business.batchPaymentWindowHours` (default 48); writes the pre-order with status `'waiting'` (batch still collecting) or `'awaiting_payment'` (batch already/now confirmed). After the transaction, if the batch just confirmed, it fans out `status: 'awaiting_payment'` + the deadline to every other `'waiting'` pre-order on the batch and sends a confirmation push notification to all affected customers.
 
-### 3.5 Order Tracking, Cancellation, and Receipts (Customer)
+**`submitBatchOrderPayment`** — callable; requires authentication. Graduates a paid pre-order into a real order. Checks ownership, idempotency (already `'paid'` with an `orderId` returns that order), status `'awaiting_payment'`, and the `paymentDeadline`; recomputes the price from the live product; verifies the `paymentConfirmations` record exactly as `submitOrder` does; then in a transaction (with a fresh re-read to defeat concurrent double-submits) creates an `orders` document **in the exact same shape `submitOrder` produces** (with `deliveryDate` = the batch's `productionDate` and `clientRequestId` = `batch-{batchOrderId}`) and updates the `batchOrders` doc to `status: 'paid'` with the new `orderId`. Note: this path performs **no daily-capacity check and no `orderCounts` increment** — batch capacity is governed by the batch's own min/max, not `dailyLimits`.
 
-- **My Orders** — lists the customer's orders with a visual progress stepper whose steps adapt to the fulfilment method (pickup vs delivery).
-- **Cancellation** — a customer may cancel an order only while it is still awaiting admin approval. The cancellation is enforced at the database-rules level: the rules permit a customer's update only if the order currently has status `Pending Approval`, the new status is `Cancelled`, and no other fields are touched. Cancelling also releases the order's slot in that date's capacity counter.
-- **Receipt** — a printable itemised receipt per order (items, charges, delivery fee, payment details, finalized order number), with an ownership check so customers can only view their own receipts.
+**`expireBatchPayments`** — **scheduled, every 15 minutes** (timezone `Asia/Kuala_Lumpur`). Finds `batchOrders` with `status == 'awaiting_payment'` and `paymentDeadline < now`; per document, in a transaction, sets `status: 'expired'` and decrements the batch's `currentQuantity`/`orderCount`, releasing the reserved units; sends a best-effort push to the customer. Already-paid orders are never touched.
 
-### 3.6 Order Management and Production Scheduling (Admin)
+**`closeExpiredProductionDates`** — **scheduled, daily at 01:00** (timezone `Asia/Kuala_Lumpur`). Finds `productionBatches` with `batchStatus == 'collecting'` and `productionDate <= today`; sets each to `batchStatus: 'cancelled'`, `status: 'closed'`, marks all its `'waiting'` pre-orders `'cancelled'`, and sends a best-effort push to each affected customer. Batches that reached `'confirmed'` are excluded — their fate is governed by the payment deadline, not the production date.
 
-- **Order Management** — a searchable, filterable list of all orders with expandable detail cards. The administrator can:
-  - **Approve** a cash order (`Pending Approval` → `Order Received`), which also mints the human-readable finalized order number `DN-YYMMDD-XX` from an atomic per-day counter;
-  - **Reject** an order with a mandatory reason (recorded on the order), which atomically releases the date's capacity slot;
-  - **Advance status** through the fulfilment pipeline — `Order Received` → `In Preparation` → `Ready for Pickup` (pickup orders) or `Out for Delivery` (delivery orders) → `Delivered`;
-  - Attach private **admin notes** to any order.
-- **Production Schedule** — a calendar view grouping active orders by delivery date. Each date shows its order load against its capacity limit, and the administrator can set or clear a per-date order limit from this page. Orders are annotated with urgency badges (Overdue / Today / Tomorrow / Urgent / Upcoming) and a suggested production stage based on days remaining (prepare ingredients → start cooking → packaging day).
+**`onOrderStatusChange`** — Firestore trigger (`onDocumentUpdated` on `orders/{orderId}`). When an order's `status` changes to one of `'In Preparation'`, `'Out for Delivery'`, `'Ready for Pickup'`, `'Delivered'`, sends a push notification to the order's customer (admin status updates are direct Firestore writes from the client, so a trigger is the only server-side hook point). `'Order Received'` is deliberately not notified — the customer just caused it by paying.
 
-### 3.7 Ingredient Planning (Admin)
+**`sendTestNotificationToSelf`** — callable; admin-only (checked against the same `ADMIN_EMAILS` list duplicated from the rules). Sends a fixed test push to the caller's own stored FCM tokens so the admin can verify the pipeline end-to-end.
 
-The Ingredient Planning page computes a consolidated shopping list. In automatic mode it takes every order that still needs preparation (status `Pending Approval`, `Order Received`, or `In Preparation`, with a delivery date of today or later), tallies the quantity ordered per product, multiplies each product's tally by its per-unit ingredient recipe, and aggregates identical ingredients across products (matched case-insensitively by name and unit) into a single line each. A manual mode lets the administrator type arbitrary product counts and run the same calculation. Products that lack a recipe are flagged in a warning so the administrator knows their ingredients are not included. The result is presented as an interactive checklist with editable quantities.
-
-### 3.8 Analytics (Admin)
-
-Two levels of reporting exist, both computed client-side from the orders collection:
-
-- **Dashboard** — at-a-glance cards: orders today, orders pending approval, orders due in the next seven days, total revenue, and the most recent orders.
-- **Analytics Dashboard** — total revenue with month-over-month growth rate, total and completed order counts, a six-month revenue trend chart, a top-products-by-revenue chart, a full product performance table (units sold and revenue per product), and an order-status distribution chart, all rendered with Recharts.
-
-A single revenue rule is applied consistently across every metric: **orders with status `Rejected`, `Cancelled`, or `Pending Approval` never count as revenue** — only approved, in-progress, and delivered orders do.
-
-### 3.9 Business Settings (Admin)
-
-The Settings page edits the public business profile (name, description, contact phone and email) and the customer-facing announcement banner (on/off toggle, title, body text). It also displays a read-only note that payment-gateway credentials are configured server-side (Section 6.3).
+All functions that touch Firestore do so via `firebase-admin`. Push sending (`pushNotifications.ts`) reads `users/{uid}.fcmTokens`, uses `sendEachForMulticast`, and prunes dead tokens from the profile; sends are best-effort and never fail the surrounding operation.
 
 ---
 
-## 4. Notable Cross-Cutting Implementations
+## 4. Frontend Structure and State Management
 
-### 4.1 Image Handling
+### 4.1 Page inventory and routing (`src/app/App.tsx`)
 
-Product images and profile photos are stored as base64 strings inside Firestore documents rather than in a separate file store. Because Firestore caps documents at 1 MiB, every upload passes through a client-side compression utility that scales the image so no dimension exceeds 1200 px, then re-encodes it as JPEG at progressively lower quality (80% → 60% → 40% → 25%) until the result fits within 500 KB, rejecting the upload if it cannot.
+Public routes: `/` (`WelcomePage` — redirects signed-in users to their home), `/login`, `/register`, `/forgot-password`.
 
-### 4.2 Atomic Counters and Slot Accounting
+Guest-accessible shopping routes (browsing and cart never require an account; checkout does): `/customer/product/:productId` (`ProductDetailPage`), `/customer/order/:productId` (`ProductOrderPage`), `/customer/batch-order/:productId` (`BatchProductPage`), `/customer/cart` (`CartPage`).
 
-Two counter mechanisms guarantee consistency without a server:
+Customer routes (rendered only when `user.role === 'customer'`, else redirect to `/login`): `/customer/home`, `/customer/checkout`, `/customer/payment` (`ToyyibPayPage`), `/customer/payment-return` (`ToyyibPayReturnPage`), `/customer/tracking` (`CustomerOrderTrackingPage`), `/customer/receipt/:orderId` (`OrderReceiptPage`), `/customer/profile`.
 
-- **Capacity counters** (`orderCounts/{date}`) — incremented in the *same atomic batch write* as order creation, and decremented in the same batch as rejection or cancellation, so the per-date order count can never drift from the orders themselves.
-- **Order-number sequence** (`counters/orders-{dateKey}`) — a Firestore transaction increments a per-day counter to produce collision-free sequential order numbers, regardless of which flow (admin approval of a cash order, or the customer's own successful online payment) mints the number.
+Admin routes (rendered only when `user.role === 'admin'`): `/admin/dashboard`, `/admin/orders` (`OrderManagementPage`), `/admin/schedule` (`ProductionSchedulePage`), `/admin/production-calendar` (`ProductionCalendarPage`, titled "Pre-Orders" in the UI), `/admin/ingredients` (`IngredientEstimationPage`), `/admin/settings`, `/admin/products`, `/admin/analytics`, `/admin/profile`.
 
----
+Role derivation happens in `App.tsx`'s `onAuthStateChanged` handler: an email in `ADMIN_EMAILS` (exported from `db.ts`) makes the user `admin`; anyone else is `customer`. A first-time Google sign-in auto-creates the customer's `users/{uid}` profile from the Google account data. On admin sign-in, if the `products` collection is empty, `seedDefaultProducts()` writes three sample products.
 
-## 5. Payment Workflow
+### 4.2 State management
 
-Payment is the most carefully designed workflow in the system, built around one principle: **an order document is only ever created once the customer's commitment is certain.**
+- **Auth/user state** — root `App` component state, passed down as props. No auth context.
+- **Cart** — the single React context (`CartContext`), persisted to `localStorage` under key `cart`; cleared automatically on the signed-in → signed-out transition (shared-device leak protection). Notes on re-added items are appended, not replaced.
+- **Checkout → payment handoff** — `sessionStorage` keys: `pendingOrder` (the draft order, or `{ kind: 'batchOrder', ... }` for a pre-order payment), `pendingBillCode` (set by `ToyyibPayPage` after bill creation), `paymentExpiresAt` (15-minute payment-session timestamp). These are only removed after the order write succeeds.
+- **Other `localStorage` keys** — `pwa-install-dismissed`, `push-notif-nudge-dismissed`.
+- Everything else is per-page component state, fetched on mount via `db.ts` and re-fetched after each page's own mutations. There are no real-time Firestore listeners; the tracking page adds pull-to-refresh instead.
 
-### 5.1 Cash
-
-After checkout, the customer sees a confirmation screen summarising the order. Only on the explicit "Confirm & Submit Order" click is the order written to Firestore, with status **`Pending Approval`** — cash orders always require the administrator's manual approval before entering production. A submission guard disables the button during the write to prevent duplicate orders from double-clicks.
-
-### 5.2 Online (Touch 'n Go / FPX via ToyyibPay)
-
-1. The browser calls the `createToyyibPayBill` Cloud Function, which creates a bill on ToyyibPay's sandbox using server-held credentials and returns the hosted payment page URL.
-2. Before redirecting, the client records a **15-minute payment-session expiry timestamp**. The pending order and the cart are left fully intact — nothing has been written to the database.
-3. The customer completes (or abandons) payment on ToyyibPay's hosted page, then is redirected back to the application's payment-return page with a status code and transaction ID.
-
-### 5.3 Return Handling and Order Creation
-
-- **Success** — the pending order is first *removed* from `sessionStorage` (so a page refresh cannot create the order twice), then written to Firestore with status **`Order Received`**, `paymentStatus: 'paid'`, the payment timestamp, the gateway transaction ID, and a freshly minted finalized order number. Paid orders **skip admin approval entirely** — the payment itself is the commitment. The cart is then cleared and the customer is taken to order tracking.
-- **Failure** — nothing is written; the cart and pending order survive, and a "Try Again" button returns the customer directly to the payment step to generate a fresh bill.
-- **Pending / expired** — if the customer returns without a definitive status, the 15-minute expiry timestamp distinguishes a still-live session from an expired one, with appropriate messaging and the same retry path.
-- **Lost session** — if the gateway reports success but the pending order is missing (e.g. the return landed in a different browser), the customer is shown their payment reference and told to contact the business.
-
-A consequence of this design is that **a failed or abandoned payment leaves zero residue in the database** — there are no ghost "unpaid" orders to clean up, and the order pipeline contains only real orders.
-
-### 5.4 Order Status Model
-
-The complete lifecycle, as enforced by the admin interface and security rules:
-
-```
-                       (cash)                    (admin)
-Checkout ──► Pending Approval ──► Order Received ──► In Preparation ──► Ready for Pickup ──► Delivered
-                │        │              ▲                                └► Out for Delivery ─► Delivered
-     (customer) │        │ (admin)      │ (online payment success —
-                ▼        ▼              │  enters here directly, paid)
-            Cancelled  Rejected      Checkout
-```
+`src/app/utils/db.ts` is the single client data-access module — every client Firestore call goes through it. Domain helpers live in `src/app/utils/business.ts` (ordering rules, daily limits, date keys, order-number format), `src/app/utils/batchOrders.ts` (shared batch types + display helpers), `src/app/utils/ingredients.ts`, and `src/app/utils/notifications.ts` (FCM permission/token/foreground handling).
 
 ---
 
-## 6. Database Structure
+## 5. Implemented Modules
 
-Cloud Firestore, single database, all collections top-level (no subcollections):
+**Authentication & profiles.** Email/password registration (client-side password policy: ≥8 characters, letters and digits), Google sign-in (auto-profile creation), email-based password reset. Customers edit name, phone, address, notes, and a cropped/compressed profile photo in `users/{uid}`; the admin has an equivalent editor writing to `adminProfile/main`.
 
-| Collection | Document ID | Contents | Read access | Write access |
+**Product catalogue (admin).** Full CRUD in `ProductManagementPage`. A product carries `name`, `description`, `price`, `unit` (free text), `prepDays`, `available`, `image` (base64, cropped via `react-easy-crop` and compressed client-side to fit Firestore's 1 MiB document cap), and two flags: **`bulkExempt`** ("No Minimum Quantity" — the product neither counts toward the bulk minimum nor restricts the date) and **`batchTracked`** ("Batch Production (MOQ)" — the product leaves the normal cart flow entirely and is sold by pre-order). Each product optionally holds a recipe: `ingredients[]` rows referencing the shared master list (`ingredientId`, `name`, `quantity` per unit, `unit`, plus optional `batchAmount`/`batchYield` entry helpers from which per-unit quantity is derived). Typing a new ingredient name auto-creates a master ingredient; deleting a product warns if it still appears in upcoming orders. A duplicate-name warning requires a second save press.
+
+**Customer ordering & cart.** Home page lists available products with an admin-controlled announcement banner; `batchTracked` products route to the pre-order page and are badged "Pre-Order", others to the quantity/notes order page ("Made to Order"). Cart supports quantity edits, swipe-to-delete, appended notes, and persists in `localStorage`. Guests can do all of this; checkout is gated behind login (with return-to-cart redirect state).
+
+**Checkout (`CheckoutPage`).** Enforced client-side at checkout (server-side enforcement of these date rules does **not** exist in `submitOrder`):
+- *Preparation lead time*: earliest selectable date = today + max `prepDays` across cart items (calendar dates before it are disabled).
+- *Bulk-minimum / collection-day rule*: carts whose counted units (excluding `bulkExempt` products) are below `orderingRules.bulkMinQuantity` (default 20) may only pick the configured `smallOrderWeekdays` (default `[6]`, Saturdays) — **stored in** `settings/business.orderingRules`, **enforced in** the checkout calendar's disabled-dates function and re-validated in `handlePlaceOrder`.
+- *Festive-season window*: dates between `orderingRules.seasonStart` and `seasonEnd` (inclusive, `YYYY-MM-DD`) are open to small orders too; a half-configured or inverted window is treated as off (`normalizeOrderingRules`).
+- *Capacity*: the selected date's `orderCounts` count is compared to `dailyLimits` (per-date doc, falling back to the reserved `_default` doc) and shown as remaining slots; a full date blocks order placement. This client check is advisory — the authoritative re-check (log-only) happens in `submitOrder`'s transaction.
+- Delivery requires address + 5-digit postal code. **No delivery fee is calculated or collected**; the UI states the Grab fee is confirmed separately via WhatsApp. Payment method choice is `'tng'` (DuitNow QR / e-wallet) or `'fpx'` only. "Place Order" writes `pendingOrder` to `sessionStorage` and navigates to `/customer/payment` — nothing is written to the database.
+
+**Pre-order / batch module (customer side, `BatchProductPage`).** Shows open (`status === 'open'`, not cancelled, future-dated) production dates for the product with live aggregate progress bars (`currentQuantity / minQuantity`, count of customers joined, remaining capacity — never individual names, by design), quantity, delivery method, and contact form. Placing the pre-order calls `createBatchPreOrder`; no payment is collected. The tracking page ("My Orders") shows pre-order cards sorted action-first (`awaiting_payment`, `waiting`, `expired`, `cancelled`), with a payment-deadline banner and an inline "Pay Now" flow that writes a `{ kind: 'batchOrder' }` `pendingOrder` and reuses the same ToyyibPay pages; expired/cancelled cards disappear 7 days after their production date (client-side filtering only — documents are never deleted). A dismissible nudge prompts customers with pre-orders to enable push notifications.
+
+**Pre-order administration (`ProductionCalendarPage`).** Calendar of production dates (amber = has batches, green = has a confirmed batch). Per date and batch-tracked product the admin can open a date with `minQuantity`/`maxQuantity` (writing the `productionBatches` doc directly — permitted by rules), edit min/max, close/reopen the date (`status` toggle), expand the pre-order list, and cancel an individual not-yet-paid pre-order (`adminCancelBatchOrder` in `db.ts`: an atomic batched write setting the pre-order `'cancelled'` and decrementing the batch counters).
+
+**Order tracking (customer).** Paid orders (including graduated batch orders — indistinguishable by design) show a status timeline adapted to fulfilment method (pickup: `Order Received → In Preparation → Ready for Pickup`; delivery: `Order Received → In Preparation → Out for Delivery → Delivered`), admin notes ("Message from seller"), and a link to a print-optimised receipt (`OrderReceiptPage`, ownership-checked, A4 print CSS with mobile-print font scaling).
+
+**Order management (admin).** Search (name/phone/order number), status filter, sort by placement or delivery date, expandable cards showing items, totals (legacy `deliveryCharge` shown when > 0; otherwise "Grab fee via WhatsApp" for delivery), payment method/transaction reference, addresses, and notes. Status advances forward-only via buttons: `Order Received` → `In Preparation` → (`Ready for Pickup` | `Out for Delivery`) → `Delivered` — direct Firestore field updates (`updateOrderFields`), which is what fires the `onOrderStatusChange` push trigger. There is no approve/reject step and no manual order creation.
+
+**Production schedule (admin, `ProductionSchedulePage`).** Groups non-rejected/non-cancelled orders by `deliveryDate` on a calendar, shows load vs limit, urgency badges (Overdue/Today/Tomorrow/Urgent/Upcoming) and suggested production stages by days remaining, and manages `dailyLimits`: per-date caps plus the **default limit** stored under the reserved document ID `_default` in the same collection.
+
+**Ingredient planning (admin, `IngredientEstimationPage`).** **Required-vs-Purchased tracking exists in code.** Automatic mode tallies product quantities from orders with status in `['Pending Approval', 'Order Received', 'In Preparation']` and `deliveryDate >= today` (matched by `productId`, name as legacy fallback), multiplies by recipes, and aggregates by master `ingredientId` into rows showing Required, an editable Purchased amount (persisted to `ingredients/{id}.purchased`), and Remaining/Shortage, plus a printable Shopping List of shortages. A manual mode accepts typed product counts. Recipe rows predating the master list ("legacy" free-text rows) aggregate by name+unit, cannot track Purchased, and a one-time **"Migrate Ingredient Data"** button converts them (creates master ingredients, carries over old per-product `stock` values into `purchased`, rewrites recipes). Warnings surface deleted products and products without recipes.
+
+**Analytics (admin).** `AdminDashboard` (headline cards, in-progress counts, recent orders) and `AnalyticsDashboard` (total revenue, 30-day revenue and growth vs prior 30 days, six-month revenue area chart, product sales bar chart and table, status pie chart) — all computed client-side from a full `orders` read. Revenue rule everywhere: orders with status `'Rejected'`, `'Cancelled'`, or `'Pending Approval'` are excluded.
+
+**Settings (admin, `AdminSettingsPage`).** The complete field set actually written to `settings/business` (a full-document `setDoc`, no merge): `businessName`, `businessDescription`, `contactPhone`, `contactEmail`, `operatingHours`, `announcementEnabled`, `announcementTitle`, `announcementText`, `orderingRules` (`{ bulkMinQuantity, smallOrderWeekdays, seasonStart, seasonEnd }`), `batchPaymentWindowHours`. The page also hosts the admin's push-notification enrolment and the "Send test notification to myself" button.
+
+---
+
+## 6. Order Status Model
+
+Status strings verbatim from the code. A normal order is **born paid** — there is no pre-payment or approval state.
+
+| Transition | Performed by |
+|---|---|
+| *(created)* → `Order Received` | System (`submitOrder` / `submitBatchOrderPayment`), triggered by the customer's verified payment |
+| `Order Received` → `In Preparation` | Admin ("Start Preparation") |
+| `In Preparation` → `Ready for Pickup` | Admin (pickup orders — "Mark as Ready") |
+| `In Preparation` → `Out for Delivery` | Admin (delivery orders — "Send Out for Delivery") |
+| `Ready for Pickup` → `Delivered` | Admin ("Mark as Picked Up") |
+| `Out for Delivery` → `Delivered` | Admin ("Mark as Delivered") |
+
+Statuses that exist in code but are **no longer reachable** for new orders: `'Pending Approval'`, `'Rejected'`, `'Cancelled'`. They survive only in display/filter logic (`statusStyles.ts`, tracking-page banners, dashboard/analytics exclusion lists, `IngredientEstimationPage`'s `NEEDS_PREPARATION` list) so that historical documents from the pre-ToyyibPay era still render correctly. No code path writes any of them to an `orders` document (the security rules would allow the admin to, but no UI exists). The order's payment state is a separate field, always `paymentStatus: 'paid'` with `paidAt`, `transactionId`, and `billCode` set at creation.
+
+---
+
+## 7. Pre-Order / Batch Lifecycle
+
+Two coupled state machines, both with verbatim status strings.
+
+**`productionBatches` documents** (ID `{productId}_{productionDate}`): admin-controlled `status: 'open' | 'closed'` (accepting new pre-orders or not) and server-maintained `batchStatus: 'collecting' | 'confirmed' | 'cancelled'`.
+- Opened by the admin from the Production Calendar with `minQuantity` / `maxQuantity` (0 = unlimited); `currentQuantity`, `orderCount`, `batchStatus`, `confirmedAt`, `paymentDeadline` are maintained only by the Cloud Functions (plus the admin's single-pre-order cancel).
+- `'collecting'` → `'confirmed'`: automatically, inside `createBatchPreOrder`'s transaction, the moment `currentQuantity` reaches `minQuantity`. Sets `confirmedAt` and `paymentDeadline` = now + `settings/business.batchPaymentWindowHours` (admin-configurable in Settings; default 48, from `DEFAULT_BATCH_PAYMENT_WINDOW_HOURS`).
+- `'collecting'` → `'cancelled'` (+ `status: 'closed'`): automatically by the daily scheduled job when the production date arrives unmet.
+
+**`batchOrders` documents**: `status: 'waiting' | 'awaiting_payment' | 'paid' | 'expired' | 'cancelled'`.
+- Created `'waiting'` (batch still collecting) or `'awaiting_payment'` (batch confirmed) by `createBatchPreOrder`. On confirmation, all `'waiting'` siblings are fanned out to `'awaiting_payment'` with the shared deadline, and every affected customer gets a push notification.
+- `'awaiting_payment'` → `'paid'`: `submitBatchOrderPayment`, which also creates the graduated `orders` document and links it via `orderId`.
+- `'awaiting_payment'` → `'expired'`: scheduled expiry (below).
+- `'waiting'` → `'cancelled'`: batch cancellation (below) or admin per-order cancel; `'awaiting_payment'` → `'cancelled'` is also possible via the admin's cancel button.
+
+**Automated behaviours** — status of each:
+- **Expiry of unpaid pre-orders: deployed scheduled function** (`expireBatchPayments`, every 15 minutes, `Asia/Kuala_Lumpur`). Marks the pre-order `'expired'` and releases its reserved quantity back to the batch.
+- **Cancellation of unfilled dates: deployed scheduled function** (`closeExpiredProductionDates`, daily 01:00, `Asia/Kuala_Lumpur`).
+- **Cleanup/hiding of old expired/cancelled cards: client-side filtering only** — `CustomerOrderTrackingPage` hides `'expired'`/`'cancelled'` cards from 7 days after the production date (`FINISHED_VISIBLE_DAYS = 7`). No document is ever deleted; there is no server-side cleanup job.
+
+**Invariants the code actually guarantees:**
+- A `'confirmed'` batch never reverts to `'collecting'` — no code path un-confirms. Expiries and admin cancels decrement `currentQuantity` (possibly below `minQuantity`) but leave `batchStatus` untouched; the daily cancel job queries only `'collecting'` batches.
+- Once a pre-order is `'paid'`, it is permanently an `orders` document ("once paid, always honored") — the expiry and cancellation jobs only ever touch `'awaiting_payment'` and `'waiting'` documents respectively.
+- Batch capacity (`maxQuantity`) and MOQ accounting are transactional — two racing pre-orders cannot oversell a batch.
+- **Paid pre-orders do *not* count against daily capacity**: `submitBatchOrderPayment` performs no `dailyLimits` check and no `orderCounts` increment; batch demand is bounded only by the batch's own `maxQuantity`.
+- Joining a confirmed batch is allowed while its payment window is open (the newcomer goes straight to `'awaiting_payment'` under the existing deadline); it is refused after the deadline passes.
+
+---
+
+## 8. Payment Workflow
+
+End to end, for both normal checkout and batch "Pay Now" (they share every payment step; only the `pendingOrder.kind` differs):
+
+1. **Bill creation.** `ToyyibPayPage` reads `pendingOrder` from `sessionStorage` and calls `createToyyibPayBill` with the amount, customer details, `returnUrl` (`{origin}/customer/payment-return`), the hard-coded `callbackUrl` (`https://asia-southeast1-dapurnyonya-9b752.cloudfunctions.net/toyyibpayCallback`), and the chosen `paymentMethod`. Channels on the bill: FPX always (`billPaymentChannel: '0'`); DuitNow QR/e-wallets additionally enabled (`enableDuitNowQR: '1'`, customer does not bear the QR charge) when the customer chose `'tng'`.
+2. **Redirect.** The page stores `paymentExpiresAt` (now + 15 minutes) and `pendingBillCode`, then navigates with `window.location.replace` — so the auto-redirecting page never enters browser history (pressing Back from ToyyibPay cannot silently create a fresh bill).
+3. **Server-to-server confirmation.** Independently of the browser, ToyyibPay POSTs the outcome to `toyyibpayCallback`, which records it in `paymentConfirmations/{billCode}` (status, `refno`, amount in cents).
+4. **Return handling** (`ToyyibPayReturnPage`, keyed on the `status_id` query parameter):
+   - `status_id === '1'` (success): calls `submitOrder` (or `submitBatchOrderPayment` when `pendingOrder.kind === 'batchOrder'`) with the stored `billCode`. Only after the callable succeeds are `pendingOrder`/`paymentExpiresAt`/`pendingBillCode` removed and the cart cleared; the customer sees a success screen and is redirected to tracking.
+   - `status_id === '3'`: **failed** — nothing was ever written; cart and draft survive; "Try Again" returns to the payment page (new bill).
+   - any other value: **pending** or, if `paymentExpiresAt` has passed, **expired** — same retry path.
+   - **lost**: session data missing on a successful return, or the callable threw (e.g. the callback record hasn't arrived yet, amount mismatch) — the page shows the ToyyibPay `transaction_id` as a support reference rather than spinning forever.
+5. **Where/when the order is written**: only inside `submitOrder`/`submitBatchOrderPayment`'s Firestore transaction, after verifying the `paymentConfirmations` record has `status === '1'` and an `amount` equal (in cents) to the **server-recomputed** total. Stored per order: `paymentMethod`, `paymentStatus: 'paid'`, `transactionId` (`refno`), `billCode`, `paidAt`, plus `paymentNote`.
+6. **Duplicate prevention**: a `started` ref guards the return page against double effects; `submitOrder` deduplicates by (`customerId`, `clientRequestId`) and by (`customerId`, `billCode`); `submitBatchOrderPayment` is idempotent on the already-paid pre-order and re-reads it inside the transaction; session keys are cleared only after success, so a reload mid-write retries into the idempotent path instead of duplicating or losing the payment.
+
+---
+
+## 9. Database Structure
+
+All collections are top-level (no subcollections). Access as enforced by `firestore.rules`; "server-only" writes come from Cloud Functions via the Admin SDK, which bypasses rules.
+
+| Collection | Document ID | Contents | Read (rules) | Write (rules) |
 |---|---|---|---|---|
-| `products` | product ID | name, description, price, unit, prep days, availability, base64 image, ingredient recipe | Public | Admin |
-| `orders` | auto-generated | customer identity and contact, line items, subtotal / delivery charge / total, fulfilment method and address, payment method and status, order status, delivery date, finalized number, transaction ID, rejection reason, admin notes | Owner or admin | Create: signed-in, own orders only. Update: admin, or owner performing a rules-constrained cancellation. Delete: admin |
-| `orderCounts` | delivery date | `{count}` — orders booked for that date | Public (enables checkout capacity check) | Any signed-in user (maintained atomically alongside order writes) |
-| `counters` | `orders-{dateKey}` | `{count}` — daily order-number sequence | Signed-in | Signed-in (transactional increment) |
-| `settings` | `business` | business name, description, contacts, announcement banner | Public | Admin |
-| `dailyLimits` | date | `{limit}` — admin-set capacity cap | Public | Admin |
-| `users` | Firebase UID | customer profile (name, phone, email, address, notes, photo) | Owner; admin may read | Owner |
-| `adminProfile` | `main` | administrator's profile | Admin | Admin |
+| `products` | `Date.now().toString()` (seeds: `'1'`–`'3'`) | catalogue item incl. `bulkExempt`, `batchTracked`, `ingredients[]` recipe, base64 `image` | public | admin |
+| `ingredients` | `` `${Date.now()}-${random}` `` | master ingredient: `id`, `name`, `unit`, `purchased` | public | admin |
+| `orders` | Firestore auto-ID | full order (fields in §9.1) | admin, or owner (`customerId == auth.uid`) | create: **nobody** (server-only via `submitOrder`/`submitBatchOrderPayment`); update/delete: admin |
+| `paymentConfirmations` | ToyyibPay `billCode` | `billCode`, `status`, `refno`, `amount` (cents), `orderId`, `reason`, `receivedAt` | **nobody** | **nobody** (written by `toyyibpayCallback`, read by the submit callables) |
+| `orderCounts` | delivery date `YYYY-MM-DD` | `{ count }` orders booked that date | public (checkout capacity display) | admin (increments happen server-side in `submitOrder`'s transaction) |
+| `counters` | `orders-{YYMMDD}` | `{ count }` daily order-number sequence | admin | admin (increments happen server-side in the submit callables' transactions) |
+| `settings` | `business` | fields listed in §5 "Settings" | public | admin |
+| `dailyLimits` | date `YYYY-MM-DD`, or reserved `_default` | `{ limit }` per-date / default capacity cap | public | admin |
+| `productionBatches` | `{productId}_{YYYY-MM-DD}` | batch config + live counters (§7) | public (live progress shown pre-login) | admin (counters/`batchStatus` maintained server-side by the batch functions) |
+| `batchOrders` | Firestore auto-ID | pre-order (interface in §9.2) | admin, or owner | create: **nobody** (server-only via `createBatchPreOrder`); update/delete: admin |
+| `users` | Firebase Auth UID | profile: `name`, `email`, `phone`, `address`, `notes`, `profilePicture`, `fcmTokens[]` | owner; admin may read | owner |
+| `adminProfile` | `main` | admin's profile | admin | admin |
 
-The security rules file defines two helper predicates — "is signed in" and "is the admin" (email comparison) — and applies them per collection as above. The customer-cancellation rule is the most granular: it uses Firestore's document-diff capability to permit an owner's update only when exactly the status and cancellation-timestamp fields change, and only for the `Pending Approval` → `Cancelled` transition.
+**Consistency mechanisms now in place:** the per-date `orderCounts` increment happens in the same transaction that creates the order (`submitOrder`); the daily `counters/orders-{YYMMDD}` sequence is incremented transactionally by both order-creating callables (so numbers are collision-free across flows); `productionBatches.currentQuantity`/`orderCount` are adjusted transactionally by `createBatchPreOrder` and `expireBatchPaymentsCore`, and by an atomic client batched write in `adminCancelBatchOrder`. Composite indexes exist (`firestore.indexes.json`) for the three server queries: `batchOrders(batchId, status)`, `batchOrders(status, paymentDeadline)`, `productionBatches(batchStatus, productionDate)`.
+
+### 9.1 Order document shape (verbatim from `submitOrder`'s write; no named TypeScript interface exists for the order document — the callable input type is `SubmitOrderRequest` in `functions/src/index.ts`)
+
+```ts
+{
+  id: newOrderRef.id,
+  customerId,
+  customerName: data.customerName || '',
+  customerPhone: data.contactPhone,
+  items: resolvedItems, // [{ productId, name, price, unit, image, quantity, notes }]
+  subtotal,
+  deliveryCharge,       // always 0 for new orders
+  total,
+  deliveryMethod,       // 'pickup' | 'delivery'
+  deliveryAddress: deliveryMethod === 'delivery' ? data.deliveryAddress : 'Pickup',
+  postalCode: deliveryMethod === 'delivery' ? (data.postalCode || '') : '',
+  specialInstructions: data.specialInstructions || '',
+  paymentMethod,        // 'tng' | 'fpx'
+  paymentNote: data.paymentNote || '',
+  status,               // 'Order Received'
+  paymentStatus,        // 'paid'
+  transactionId,        // ToyyibPay refno, or null
+  billCode: data.billCode || null,
+  paidAt: paymentStatus === 'paid' ? new Date().toISOString() : null,
+  orderDate: new Date().toISOString(),
+  deliveryDate: data.deliveryDate,  // YYYY-MM-DD
+  finalizedNumber,      // 'DN-YYMMDD-NN'
+  clientRequestId,
+}
+```
+
+The admin later adds `adminNotes` via `updateOrderFields`. Legacy orders may additionally carry `rejectReason`, `paymentIntentId`, and a non-zero `deliveryCharge`.
+
+### 9.2 Batch types (verbatim from `src/app/utils/batchOrders.ts`)
+
+```ts
+export type BatchStatus = 'collecting' | 'confirmed' | 'cancelled';
+
+export interface ProductionBatch {
+  id: string; // `${productId}_${productionDate}`
+  productId: string;
+  productName: string;
+  productionDate: string; // YYYY-MM-DD
+  status: 'open' | 'closed'; // admin toggle — closed stops accepting new pre-orders
+  minQuantity: number;
+  maxQuantity: number; // 0 = unlimited, same convention as dailyLimits
+  currentQuantity: number;
+  orderCount: number;
+  batchStatus: BatchStatus;
+  confirmedAt?: string | null;
+  paymentDeadline?: string | null;
+}
+
+export type BatchOrderStatus = 'waiting' | 'awaiting_payment' | 'paid' | 'expired' | 'cancelled';
+
+export interface BatchOrder {
+  id: string;
+  customerId: string;
+  customerName: string;
+  customerPhone: string;
+  batchId: string;
+  productionDate: string;
+  productId: string;
+  productName: string;
+  price: number;
+  unit: string;
+  image: string;
+  quantity: number;
+  notes: string;
+  deliveryMethod: 'pickup' | 'delivery';
+  deliveryAddress: string;
+  postalCode: string;
+  specialInstructions: string;
+  createdAt: string;
+  status: BatchOrderStatus;
+  paymentDeadline: string | null;
+  billCode: string | null;
+  paymentMethod: 'tng' | 'fpx' | '';
+  paymentNote: string;
+  orderId: string | null; // set once graduated into a real orders/ doc
+}
+```
+
+### 9.3 Product type (verbatim from `src/app/pages/admin/ProductManagementPage.tsx`)
+
+```ts
+export interface ProductIngredient {
+  ingredientId?: string;
+  name: string;
+  quantity: number;
+  unit: string;
+  batchAmount?: number;
+  batchYield?: number;
+}
+
+interface Product {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  image: string;
+  unit: string;
+  prepDays: number;
+  available: boolean;
+  bulkExempt?: boolean;
+  batchTracked?: boolean;
+  ingredients?: ProductIngredient[];
+}
+```
+
+### 9.4 Settings document
+
+There is no named interface for the settings document; the authoritative shape is the object passed to `saveSettings` in `AdminSettingsPage.tsx` (fields listed in §5), with the ordering rules subtree typed as:
+
+```ts
+export interface OrderingRules {
+  bulkMinQuantity: number;
+  smallOrderWeekdays: number[]; // JS getDay() values (0=Sun … 6=Sat)
+  seasonStart: string | null;   // YYYY-MM-DD inclusive; both null = off
+  seasonEnd: string | null;
+}
+```
 
 ---
 
-## 7. Progressive Web App Implementation
+## 10. Security Rules Summary (`firestore.rules`)
 
-The application is a fully installable PWA:
+Two helper predicates: `isSignedIn()` (`request.auth != null`) and `isAdmin()` — **the admin is identified purely by email**: `request.auth.token.email in ['yikbryan0528work@gmail.com', 'ksl_joyce@yahoo.com']`. There is no custom-claims mechanism; the same allowlist is duplicated in `db.ts` (client role routing) and `functions/src/index.ts` (`sendTestNotificationToSelf`).
 
-- **Web app manifest** — complete, with app identity, standalone display mode, theme colours, and a full icon set including maskable icons for Android and Apple touch icons and a launch splash image for iOS.
-- **Service worker** — generated by Workbox at build time with an auto-update registration strategy. All build assets (HTML, JS, CSS, images, fonts) are precached, with explicit runtime caching policies: stale-while-revalidate for scripts and styles, cache-first for images (30-day expiry) and fonts (1-year expiry). This gives the application an offline-capable shell — the interface loads without a network connection, while live data (products, orders) still requires connectivity.
-- **Install prompt** — a custom in-app banner that captures the browser's `beforeinstallprompt` event to offer one-tap installation on Android and desktop, detects when the app is already running in standalone mode, and — because iOS Safari does not support the install-prompt API — shows iOS users step-by-step "Share → Add to Home Screen" instructions instead. Dismissal is remembered in `localStorage`.
+Per collection: `products`, `ingredients`, `settings`, `dailyLimits`, `productionBatches`, `orderCounts` — public read, admin-only write. `orders` and `batchOrders` — read by admin or the owning customer (`resource.data.customerId == request.auth.uid`); `allow create: if false` (creation is exclusively server-side via Admin SDK); update/delete admin-only. `paymentConfirmations` — `allow read, write: if false` (Cloud Functions only). `users/{uid}` — read/write by the owner, read by admin. `adminProfile`, `counters` — admin only.
+
+There are **no field-diff (granular update-constraint) rules** in the current file — the previous customer-cancellation diff rule was removed along with the feature. Customers now have zero write access to `orders`: since every order is paid before it exists, the rules comment notes there is nothing for a customer to legitimately change.
 
 ---
 
-## 8. Key Design Decisions
+## 11. PWA Implementation
 
-1. **Serverless, client-executed business logic.** All domain logic runs in the browser against Firestore, secured by declarative rules; Cloud Functions exist only to hold third-party API secrets. This eliminated an entire API-server tier — its code, hosting, and maintenance — at the cost of trusting rules (rather than server code) as the enforcement boundary, an appropriate trade-off for a single-business system.
+- **Manifest** (generated by `vite-plugin-pwa` as `manifest.json`): name/short name `DapurNyonya`, `display: 'standalone'`, `orientation: 'portrait'`, `start_url`/`scope`/`id` `/`, theme `#f97316` on background `#fff7ed`, 192/512 px icons in both `any` and `maskable` purposes, an iOS `apple-touch-icon`, and a 1170×2532 narrow-form-factor screenshot.
+- **Service worker**: Workbox-generated. Deviations from a standard setup: `registerType: 'prompt'` — a new deploy does **not** auto-activate; `main.tsx`'s `onNeedRefresh` shows a persistent toast with an "Update" action and only then swaps versions (no `skipWaiting` mid-session). `navigateFallbackDenylist: [/^\/__\//]` keeps Firebase's reserved paths (notably the `signInWithPopup` handler at `/__/auth/handler`) from being served the cached SPA shell. Precaching covers all build assets; runtime caching is StaleWhileRevalidate for scripts/styles/workers and CacheFirst for images (30 days) and fonts (1 year). The app shell therefore loads offline; live data still requires connectivity.
+- **Push service worker**: a second, hand-written `public/firebase-messaging-sw.js` is registered manually at scope `/firebase-cloud-messaging-push-scope/` (so it never fights Workbox for `/`), shows OS notifications for background FCM messages, and opens the notification's link on click. Foreground messages are surfaced as in-app toasts instead (`App.tsx` + `onMessage`).
+- **Install prompt** (`InstallAppPrompt.tsx`): captures `beforeinstallprompt` for one-tap install on Chromium platforms, detects standalone mode, shows iOS users "Share → Add to Home Screen" text instead (iOS has no prompt API), and remembers dismissal in `localStorage`.
 
-2. **Deferred order creation.** No order document is created until the customer explicitly confirms (cash) or the payment gateway confirms payment (online). The database therefore never contains abandoned or unpaid orders, which keeps the admin's order pipeline, capacity counters, and revenue figures clean by construction rather than by cleanup.
+---
 
-3. **Asymmetric approval flow.** Cash orders require manual admin approval (`Pending Approval`), since a cash promise carries no commitment; paid online orders bypass approval and enter the pipeline directly as `Order Received`. The approval step doubles as the administrator's manual backstop for date-capacity management.
+## 12. Legacy Feature Audit
 
-4. **Single-admin role by email.** With exactly one business owner as the target user, admin identity is an email-address check applied consistently in the client and in the security rules, avoiding the additional machinery of a role-claims system.
+- **Cash payment option at checkout — REMOVED.** No code path can create a cash order: checkout offers only `'tng'`/`'fpx'`, and `submitOrder` rejects any other `paymentMethod`. Read-only display mappings for historical `'cash'` orders remain in `OrderManagementPage.tsx` (payment-method label map) and `OrderReceiptPage.tsx` (`PAYMENT_LABELS`, `paymentStatus()`).
+- **`Pending Approval` status and admin approve/reject workflow — REMOVED as a workflow; the status string is DORMANT display/filter handling.** No UI or function creates, approves, or rejects an order. The string survives, unreachable for new orders, in: `src/app/utils/statusStyles.ts`, `src/app/pages/customer/CustomerOrderTrackingPage.tsx` (legacy banner, explicitly commented "Legacy display only"), `src/app/pages/admin/IngredientEstimationPage.tsx` (`NEEDS_PREPARATION`), `src/app/pages/admin/ProductManagementPage.tsx` (outstanding-units check), `src/app/pages/admin/AnalyticsDashboard.tsx` and `AdminDashboard.tsx` (revenue exclusions). `'Rejected'`/`rejectReason` handling is in the same dormant category (`statusStyles.ts`, tracking page, schedule/analytics filters, plus the `.status-badge--rejected` CSS class in `src/styles/application.css`).
+- **Customer self-cancellation of orders (any form) — REMOVED.** The rules grant customers no write access to `orders` at all, and no cancel UI exists. A dormant display block for historical `'Cancelled'` orders remains in `CustomerOrderTrackingPage.tsx`. (Admin cancellation of *batch pre-orders* exists, but that is a different collection and not a customer action.)
+- **Distance-based delivery fee calculation — REMOVED (no code remains).** Searches for Nominatim, OpenRouteService, `calculateDeliveryDistance`, fee tiers, and the postal-code fallback return nothing in `src/`, `functions/src/`, or config; the Cloud Function no longer exists.
+- **Delivery-fee charging at checkout — REMOVED.** `deliveryCharge` is hard-coded to `0` in both order-creating functions; checkout and the batch page state the Grab fee is arranged via WhatsApp. Dormant remnant: both `OrderManagementPage.tsx` and `OrderReceiptPage.tsx` still render `order.deliveryCharge` when a legacy order carries a non-zero value (each falls back to "Grab fee via WhatsApp" / "Separate (Grab)" for new delivery orders where it is 0).
+- **Payment-proof image upload — REMOVED (no code remains).**
+- **Manual admin order entry — REMOVED (no code remains).** `OrderManagementPage` has no creation UI, and `orders` creation is blocked by rules for all clients including the admin.
 
-5. **Secrets isolated in server environment variables.** The ToyyibPay secret key, category code, and OpenRouteService API key exist only as Cloud Functions environment variables — they never appear in the client bundle, in Firestore, or in version control (the env file is gitignored).
+---
 
-6. **Distance-based delivery pricing with graceful degradation.** Delivery fees reflect real driving distance (free-tier geocoding and routing APIs, no billing dependency), with a hard 20 km service radius; any failure in the geocoding/routing chain silently falls back to a simpler postal-code tariff so a third-party outage can never block checkout.
+## 13. Implementation Status Table
 
-7. **Images inside the database.** Storing compressed base64 images directly in Firestore documents avoids introducing a second storage service and its access rules; enforced client-side compression keeps every document safely under Firestore's size limit.
+| Feature | Status | Notes |
+|---|---|---|
+| Online payment via ToyyibPay (FPX) | **Fully implemented** | Sandbox environment (`dev.toyyibpay.com`), not production ToyyibPay |
+| DuitNow QR / e-wallet channel | **Partially implemented — external dependency** | `enableDuitNowQR: '1'` is sent for `'tng'`; visible only if DuitNow QR is activated for the category on ToyyibPay's dashboard, and the FPX tab cannot be hidden for `'tng'` bills |
+| Server-side payment verification | **Fully implemented** | `toyyibpayCallback` record + status/amount check inside `submitOrder`/`submitBatchOrderPayment`; client URL params never trusted |
+| Server-side order creation & price recomputation | **Fully implemented** | Client `create` blocked by rules for both `orders` and `batchOrders` |
+| Duplicate-order prevention | **Fully implemented** | `clientRequestId` + `billCode` dedup, transactional re-reads, post-success session cleanup |
+| Pre-order lifecycle: automatic batch confirmation at MOQ | **Fully implemented** | Inside `createBatchPreOrder` transaction, with fan-out to waiting customers |
+| Pre-order lifecycle: expiry of unpaid pre-orders | **Fully implemented** | Deployed scheduled function `expireBatchPayments`, every 15 minutes |
+| Pre-order lifecycle: cancellation of unfilled dates | **Fully implemented** | Deployed scheduled function `closeExpiredProductionDates`, daily 01:00 MYT |
+| Pre-order lifecycle: cleanup/hiding of old expired/cancelled cards | **Partially implemented** | Client-side hiding only, 7 days after production date; documents are never deleted or archived |
+| Push notifications | **Fully implemented** | Batch confirmed / expired / cancelled, order-status changes (`onOrderStatusChange`), admin test send; foreground messages shown as toasts; requires per-device opt-in |
+| In-app notification centre / history | **Not implemented** | Notifications are push + transient toasts only; nothing is stored or listable in-app |
+| Email notifications | **Not implemented** | Only ToyyibPay's own bill email (`billContentEmail`) exists |
+| Required-vs-Purchased ingredient tracking | **Fully implemented** | Master `ingredients` collection with `purchased`; legacy free-text recipe rows need the one-time in-app migration before they can track Purchased |
+| Bulk minimum rule (default 20 units) | **Partially implemented — client-side only** | Stored in `settings/business.orderingRules`; enforced in the checkout calendar and validation; `submitOrder` does not re-check it server-side |
+| Saturday/collection-day rule for small orders | **Partially implemented — client-side only** | Same enforcement point and same server-side gap as above |
+| Festive-season windows | **Partially implemented — client-side only** | Same as above; half-configured windows treated as off |
+| `bulkExempt` product flag | **Fully implemented (within the client-side rule)** | Excluded from counted units; exempt-only carts unrestricted |
+| Daily capacity limits | **Partially implemented** | Advisory client pre-check (public `orderCounts` + `dailyLimits`/`_default`); transactional server re-check exists but deliberately only **logs** an overbook — a paid order is never refused |
+| Batch orders vs daily capacity | **Not implemented (by design)** | Graduated batch orders bypass `dailyLimits`/`orderCounts` entirely |
+| Receipts | **Fully implemented** | Print-optimised A4 receipt page with ownership check |
+| Analytics | **Fully implemented (client-side)** | Full `orders` collection read and aggregated in the browser; no server aggregation |
+| Order status timeline & tracking | **Fully implemented** | Method-adaptive steps; pull-to-refresh; no real-time listeners |
+| PWA install + offline shell + update prompt | **Fully implemented** | Data requires connectivity; update is user-confirmed |
+| Guest browsing & cart | **Fully implemented** | Checkout gated behind login with return redirect |
+| Admin identity via custom claims | **Not implemented** | Hard-coded email allowlist duplicated in rules, client, and functions |
 
-8. **Atomicity for shared counters.** Capacity counters are updated in the same batch write as the order they account for, and order numbers come from a transactional counter — the two places where concurrent writes could corrupt state are exactly the two places using Firestore's atomic primitives.
+---
 
-9. **On-demand reads rather than live listeners.** Pages fetch data when opened and after their own actions. For a single administrator and a modest customer base, this keeps the data layer simple and predictable; the trade-off is that changes made elsewhere appear on the next visit to a page rather than instantly.
+## 14. Key Design Decisions
 
-10. **UX tuned for the customer demographic.** The customer base skews middle-aged to senior, which shaped concrete choices: large touch targets, persistent inline error messages rather than transient ones, extended (6-second) toast notifications, a minimal number of choices per screen, and a step-by-step visual order tracker.
+1. **No order document exists until payment is verified.** `orders` creation is blocked for clients; `submitOrder` runs server-side and requires a matching `paymentConfirmations` record. A failed or abandoned payment leaves zero database residue, which in turn made the whole cash/approval/cancellation apparatus unnecessary.
+2. **Payment truth comes from the gateway's server-to-server callback, not the browser.** The return URL's `status_id` only selects which screen to show and which callable to attempt; the callable trusts only what `toyyibpayCallback` recorded, and additionally matches the paid amount (in cents) against a server-recomputed total. This closed two audited gaps: client-set prices and orders minted by hand-typing the success URL.
+3. **Prices are always recomputed from the live catalogue at order time** (both flows), so the client-held cart is display-only.
+4. **The batch module inverts the "paid before it exists" invariant deliberately**: a pre-order must exist, accumulate, and possibly die (MOQ unmet) before money moves, so pre-orders live in a separate `batchOrders` collection and only graduate into `orders` — written in the exact shape `submitOrder` produces — once paid. Every downstream consumer (order management, ingredient planning, analytics, tracking, receipts) handles batch orders with zero changes.
+5. **Paid work is never clawed back**: expiry/cancellation jobs only touch unpaid states, a confirmed batch never un-confirms, and an over-capacity paid order is accepted and logged rather than refused (the admin resolves rare overbooking manually; refusing captured money automatically was judged worse).
+6. **Idempotency everywhere in the money path**: client-generated `clientRequestId`, `billCode` dedup, and transactional re-reads make reloads, double-clicks, and two-tab payments safe.
+7. **Ordering rules live in `settings/business`, not code**, so the admin changes the bulk minimum, collection days, festive windows, and batch payment window without a release. Enforcement of the date rules is client-side only — accepted as sufficient for this trust model (the same customer sees the same calendar; the server still controls money and capacity-critical writes).
+8. **Delivery fees were removed rather than automated.** The earlier Nominatim + OpenRouteService distance-fee system was deleted; the Grab fee varies by pickup time and is now agreed over WhatsApp, so the amount paid online is always exactly the items subtotal. Git history retains the removal ("Remove delivery fee calculation…" era commits).
+9. **Single-admin identity is an email allowlist** applied in three places (rules, client routing, functions) instead of custom claims — minimal machinery for a system with one business owner (two allowed emails).
+10. **Scheduled-job logic is extracted into pure core functions** (`batchLifecycle.ts`, `pushNotifications.ts`) taking an injected `db`/clock/`messaging`, because Cloud Scheduler and FCM have no emulators — the deployed handlers are thin wrappers, and the cores are integration-tested against the Firestore emulator.
+11. **Push is best-effort by construction**: a failed send never fails the business operation that triggered it, and dead tokens are pruned on the fly.
+12. **Images are compressed base64 strings inside Firestore documents** (crop dialog + client-side compression) — one database, no Cloud Storage bucket or second set of security rules, at the cost of Firestore's 1 MiB document ceiling policed client-side.
+13. **On-demand reads, no realtime listeners**: each page fetches on mount and after its own writes (plus pull-to-refresh on tracking). Simple and cheap at this scale; cross-device changes appear on next visit rather than live.
+14. **A deliberate app-update handshake** (`registerType: 'prompt'` + persistent toast) replaced silent service-worker swaps, so a customer mid-checkout is never hot-swapped onto new code.

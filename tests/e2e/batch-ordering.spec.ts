@@ -169,12 +169,15 @@ test.describe('batch/MOQ production ordering', () => {
     expect((await readBatchOrder(batchOrderIdB)).status).toBe('awaiting_payment');
 
     // Drive the REAL submitBatchOrderPayment function (not the seed shortcut):
-    // without a recorded payment confirmation it must refuse...
+    // without a recorded payment confirmation it must refuse. 'unavailable'
+    // (not 'failed-precondition') because a missing confirmation is treated as
+    // a transient callback lag the return page retries — a genuinely never-paid
+    // bill just never produces one.
     const unpaid = await callSubmitBatchOrderPayment(emailB, passwordB, {
       batchOrderId: batchOrderIdB, billCode: 'bill-that-never-paid', paymentMethod: 'fpx',
     });
     expect(unpaid.ok).toBe(false);
-    expect(unpaid.code).toBe('functions/failed-precondition');
+    expect(unpaid.code).toBe('functions/unavailable');
 
     // ...someone else's sign-in must be rejected even with a valid bill...
     const billCode = `test-bill-${batchOrderIdB}`;

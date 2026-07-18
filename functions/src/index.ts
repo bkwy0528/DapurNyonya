@@ -261,9 +261,12 @@ export const submitOrder = onCall(
         throw new HttpsError('failed-precondition', `Product ${item.productId} no longer exists.`);
       }
       const product = snap.data() as any;
-      if (product.available === false) {
-        throw new HttpsError('failed-precondition', `${product.name} is no longer available.`);
-      }
+      // Deliberately NOT rejecting a product whose `available` flag is now
+      // false: the customer has already paid by this point, and the paid amount
+      // is independently re-verified below. `available` gates whether a NEW cart
+      // can add the item, not whether an already-paid order is honored — a mid-
+      // checkout sold-out toggle must not strand a payment. The order still
+      // surfaces normally in Order Management for the admin to fulfil or refund.
       return {
         productId: item.productId,
         name: product.name as string,
@@ -298,7 +301,12 @@ export const submitOrder = onCall(
 
     const confirmationSnap = await db.collection('paymentConfirmations').doc(data.billCode).get();
     if (!confirmationSnap.exists) {
-      throw new HttpsError('failed-precondition', 'Payment has not been confirmed yet. Please wait a moment and try again.');
+      // ToyyibPay's server-to-server callback may not have landed yet if the
+      // customer's browser returns faster than the callback POST arrives.
+      // 'unavailable' (not 'failed-precondition') marks this as transient so
+      // the return page retries for a few seconds before giving up — a genuine
+      // never-paid bill simply exhausts those retries.
+      throw new HttpsError('unavailable', 'Payment has not been confirmed yet. Please wait a moment and try again.');
     }
     const confirmation = confirmationSnap.data() as any;
     if (confirmation.status !== '1') {
@@ -626,7 +634,9 @@ export const submitBatchOrderPayment = onCall(
 
     const confirmationSnap = await db.collection('paymentConfirmations').doc(data.billCode).get();
     if (!confirmationSnap.exists) {
-      throw new HttpsError('failed-precondition', 'Payment has not been confirmed yet. Please wait a moment and try again.');
+      // Transient callback lag — same reasoning as submitOrder above: 'unavailable'
+      // so the return page retries briefly rather than dead-ending the customer.
+      throw new HttpsError('unavailable', 'Payment has not been confirmed yet. Please wait a moment and try again.');
     }
     const confirmation = confirmationSnap.data() as any;
     if (confirmation.status !== '1') {

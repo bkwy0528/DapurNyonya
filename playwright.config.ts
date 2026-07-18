@@ -15,7 +15,11 @@ export default defineConfig({
   // the Firebase SDK take a moment to transform on a fresh dev server).
   workers: 1,
   timeout: 45000,
-  retries: 0,
+  // The first invocation of each Cloud Function in a fresh emulator run pays a
+  // cold-start cost that can exceed even generous per-assertion timeouts when
+  // the full suite runs cold (see the batch-ordering specs). One retry lets a
+  // cold-start miss self-heal without masking real failures.
+  retries: 1,
   reporter: [['list']],
   use: {
     // Dedicated port so the suite can never collide with — or accidentally
