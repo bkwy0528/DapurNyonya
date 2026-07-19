@@ -1,17 +1,34 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/adminAuth';
-import { registerCustomer, deliveryDateDaysFromNow } from './helpers/registerCustomer';
+import { registerCustomer } from './helpers/registerCustomer';
 import { seedBatchProduct, seedProductionBatch, findBatchOrderId, seedBatchOrderPaid, seedPaymentConfirmation, readBatchOrder } from './helpers/seedBatch';
 import { callSubmitBatchOrderPayment } from './helpers/callFunctions';
 
 // Batch/MOQ products skip the normal cart/checkout flow entirely — customers
 // pre-order against an admin-opened production date and pay nothing until
-// enough pre-orders accumulate. Production date is "today" (not a future
-// date) purely so the admin Pre-Orders page's default calendar selection (today)
-// shows it without needing to click through the calendar in the test.
-const PRODUCTION_DATE = deliveryDateDaysFromNow(0);
+// enough pre-orders accumulate. Production date must clear the pre-order
+// cutoff (productionDate - prepDays, prepDays=1 per seedBatchProduct) or
+// createBatchPreOrder rejects it. The 5th of next month is always comfortably
+// clear of that cutoff and keeps navigating the admin calendar deterministic
+// (no "today" styling, and leading outside-days can never be a 5).
+const nextMonthDay5 = () => {
+  const base = new Date();
+  const d = new Date(base.getFullYear(), base.getMonth() + 1, 5);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+const PRODUCTION_DATE = nextMonthDay5();
 const PRODUCT_ID = 'chang-test';
 const BATCH_ID = `${PRODUCT_ID}_${PRODUCTION_DATE}`;
+
+// Clicks "5" in next month on the admin Production Calendar's rdp widget —
+// shared by every test here that needs the card for PRODUCTION_DATE to show.
+const goToProductionDateOnCalendar = async (page: import('@playwright/test').Page) => {
+  await page.locator('.rdp button[aria-label*="next" i]').click();
+  await page.locator('.rdp button:not([disabled])', { hasText: /^5$/ }).first().click();
+};
 
 test.describe('batch/MOQ production ordering', () => {
   test('MOQ crossing confirms the batch and opens payment for everyone already waiting', async ({ browser }) => {
@@ -76,6 +93,7 @@ test.describe('batch/MOQ production ordering', () => {
     await loginAsAdmin(adminPage);
     await adminPage.goto('/admin/production-calendar');
     await expect(adminPage.getByText('Test Chang')).toBeVisible();
+    await goToProductionDateOnCalendar(adminPage);
     await expect(adminPage.getByText('Confirmed — payment open')).toBeVisible();
     await expect(adminPage.getByText('5 / 5')).toBeVisible();
     await adminPage.getByRole('button', { name: /2 orders/ }).click();
@@ -225,8 +243,11 @@ test.describe('batch/MOQ production ordering', () => {
     await loginAsAdmin(adminPage);
     await adminPage.goto('/admin/production-calendar');
 
-    // The Pre-Orders page defaults to today — open Admin Chang's date with a
-    // minimum of 10 and no maximum, through the real form.
+    // The Pre-Orders page defaults to today, which the pre-order cutoff
+    // (productionDate - prepDays) would immediately reject — pick PRODUCTION_DATE instead.
+    await goToProductionDateOnCalendar(adminPage);
+
+    // Open Admin Chang's date with a minimum of 10 and no maximum, through the real form.
     const adminCard = adminPage.locator('div.rounded-lg.border', { hasText: 'Admin Chang' });
     await adminCard.getByPlaceholder('e.g. 20').fill('10');
     await adminCard.getByRole('button', { name: 'Open this date' }).click();
@@ -245,8 +266,11 @@ test.describe('batch/MOQ production ordering', () => {
     await expect(custPage).toHaveURL(/\/customer\/tracking$/, { timeout: 20000 });
 
     // Admin cancels that pre-order from the expanded order list; the reserved
-    // quantity is released and the row flips to cancelled.
+    // quantity is released and the row flips to cancelled. A reload resets the
+    // calendar's selected date back to today, so navigate back to
+    // PRODUCTION_DATE before looking for the card's batch info again.
     await adminPage.reload();
+    await goToProductionDateOnCalendar(adminPage);
     const refreshedCard = adminPage.locator('div.rounded-lg.border', { hasText: 'Admin Chang' });
     await expect(refreshedCard.getByText('4 / 10')).toBeVisible();
     await refreshedCard.getByRole('button', { name: /1 order/ }).click();

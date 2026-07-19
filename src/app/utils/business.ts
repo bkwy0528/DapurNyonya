@@ -25,6 +25,25 @@ export function getMaxPrepDaysFromCart(cartItems: any[]) {
   return cartItems.reduce((max: number, item: any) => Math.max(max, item.prepDays || 1), 1);
 }
 
+// ─── Batch/MOQ pre-order cutoff ───────────────────────────────────────────
+//
+// A production date must stop accepting new pre-orders once there's no
+// longer enough time left to prepare it — i.e. once today reaches the day
+// preparation would need to begin. The day right before that is the last
+// "payment day": still open for new pre-orders (or for tipping an
+// already-collecting batch over its minimum) since production hasn't
+// started yet.
+
+export function getBatchPrepStartDate(productionDate: string, prepDays: number): string {
+  const d = new Date(`${productionDate}T00:00:00`);
+  d.setDate(d.getDate() - Math.max(0, prepDays));
+  return toLocalYMD(d);
+}
+
+export function isBatchDateOrderable(productionDate: string, prepDays: number, todayKey: string): boolean {
+  return todayKey < getBatchPrepStartDate(productionDate, prepDays);
+}
+
 // ─── Open order date ranges (preorder scheduling) ────────────────────────────
 //
 // General (non-batch-tracked) product orders are only accepted on dates that

@@ -188,6 +188,24 @@ function generateFinalOrderNumber(sequence: number): string {
   return `DN-${getDateKey()}-${String(sequence).padStart(2, '0')}`;
 }
 
+function toYmd(date: Date): string {
+  const YYYY = date.getFullYear();
+  const MM = String(date.getMonth() + 1).padStart(2, '0');
+  const DD = String(date.getDate()).padStart(2, '0');
+  return `${YYYY}-${MM}-${DD}`;
+}
+
+// A production date must stop accepting new pre-orders once there's no
+// longer enough time left to prepare it — i.e. once today reaches the day
+// preparation would need to begin (mirrors src/app/utils/business.ts's
+// isBatchDateOrderable; duplicated here since Functions is a separate
+// package and this check must be authoritative server-side).
+function getBatchPrepStartDate(productionDate: string, prepDays: number): string {
+  const d = new Date(`${productionDate}T00:00:00`);
+  d.setDate(d.getDate() - Math.max(0, prepDays));
+  return toYmd(d);
+}
+
 interface SubmitOrderItem {
   productId: string;
   quantity: number;
@@ -459,6 +477,10 @@ export const createBatchPreOrder = onCall(
     }
     if (product.available === false) {
       throw new HttpsError('failed-precondition', `${product.name} is no longer available.`);
+    }
+    const prepDays = Number(product.prepDays) || 1;
+    if (toYmd(new Date()) >= getBatchPrepStartDate(data.productionDate, prepDays)) {
+      throw new HttpsError('failed-precondition', 'This production date is no longer accepting pre-orders — preparation has already begun.');
     }
 
     const batchId = `${data.productId}_${data.productionDate}`;

@@ -6,6 +6,8 @@ import {
   getMaxPrepDaysFromCart,
   normalizeOpenOrderRanges,
   isDateOrderable,
+  getBatchPrepStartDate,
+  isBatchDateOrderable,
 } from '../../src/app/utils/business';
 
 describe('validatePassword', () => {
@@ -122,5 +124,34 @@ describe('isDateOrderable', () => {
 
   it('is always false when no ranges are configured (closed by default)', () => {
     expect(isDateOrderable('2026-06-10', [])).toBe(false);
+  });
+});
+
+describe('getBatchPrepStartDate', () => {
+  it('subtracts prepDays from the production date', () => {
+    expect(getBatchPrepStartDate('2026-07-20', 4)).toBe('2026-07-16');
+  });
+
+  it('crosses a month boundary correctly', () => {
+    expect(getBatchPrepStartDate('2026-08-02', 4)).toBe('2026-07-29');
+  });
+
+  it('treats a negative prepDays as zero', () => {
+    expect(getBatchPrepStartDate('2026-07-20', -1)).toBe('2026-07-20');
+  });
+});
+
+describe('isBatchDateOrderable', () => {
+  // prepDays=4 → prep starts 2026-07-16, so the "payment day" is 2026-07-15.
+  it('is orderable on the payment day (the day before prep starts)', () => {
+    expect(isBatchDateOrderable('2026-07-20', 4, '2026-07-15')).toBe(true);
+  });
+
+  it('is no longer orderable once prep starts', () => {
+    expect(isBatchDateOrderable('2026-07-20', 4, '2026-07-16')).toBe(false);
+  });
+
+  it('is no longer orderable on or after the production date itself', () => {
+    expect(isBatchDateOrderable('2026-07-20', 4, '2026-07-20')).toBe(false);
   });
 });

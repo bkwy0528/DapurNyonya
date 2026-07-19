@@ -19,6 +19,7 @@ import { createBatchPreOrder } from '../../utils/submitOrder';
 import { onImageError } from '../../utils/imageFallback';
 import { vibrate } from '../../utils/haptics';
 import { ProductionBatch, getBatchStatusLabel, getRemainingToMinimum, getRemainingCapacity } from '../../utils/batchOrders';
+import { isBatchDateOrderable } from '../../utils/business';
 
 interface BatchProductPageProps {
   user: User | null;
@@ -55,10 +56,12 @@ export default function BatchProductPage({ user }: BatchProductPageProps) {
     if (!productId) { setLoading(false); return; }
     Promise.all([getProducts(), getProductionBatchesForProduct(productId)])
       .then(([products, productBatches]) => {
-        setProduct(products.find((p: any) => p.id === productId) || null);
+        const foundProduct = products.find((p: any) => p.id === productId) || null;
+        setProduct(foundProduct);
+        const prepDays = foundProduct?.prepDays || 1;
         const today = todayKey();
         const open = (productBatches as ProductionBatch[])
-          .filter(b => b.status === 'open' && b.batchStatus !== 'cancelled' && b.productionDate >= today)
+          .filter(b => b.status === 'open' && b.batchStatus !== 'cancelled' && isBatchDateOrderable(b.productionDate, prepDays, today))
           .sort((a, b) => a.productionDate.localeCompare(b.productionDate));
         setBatches(open);
         if (open.length > 0) setSelectedBatchId(open[0].id);
