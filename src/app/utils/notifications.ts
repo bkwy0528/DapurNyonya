@@ -1,7 +1,7 @@
-import { getMessaging, getToken, isSupported, onMessage, type Messaging } from 'firebase/messaging';
-import { arrayUnion } from 'firebase/firestore';
+import { getMessaging, getToken, deleteToken, isSupported, onMessage, type Messaging } from 'firebase/messaging';
+import { arrayUnion, arrayRemove } from 'firebase/firestore';
 import { firebaseApp } from '../../firebase';
-import { saveUserProfile } from './db';
+import { getUserProfile, saveUserProfile } from './db';
 
 export type ForegroundNotificationHandler = (payload: unknown) => void;
 
@@ -53,6 +53,56 @@ export async function registerForPush(uid: string): Promise<boolean> {
   }
   await saveUserProfile(uid, { fcmTokens: arrayUnion(token) });
   return true;
+}
+
+// Reads back the token already registered for this browser, without
+// prompting for permission (assumes permission is already granted).
+async function getExistingToken(): Promise<string | null> {
+  if (!vapidKey || !('Notification' in window) || Notification.permission !== 'granted') {
+    return null;
+  }
+  const messaging = await getFirebaseMessaging();
+  if (!messaging) {
+    return null;
+  }
+  try {
+    const serviceWorkerRegistration = await navigator.serviceWorker.register(PUSH_SW_URL, { scope: PUSH_SW_SCOPE });
+    return await getToken(messaging, { vapidKey, serviceWorkerRegistration });
+  } catch {
+    return null;
+  }
+}
+
+// Whether this device currently has an active, saved subscription — distinct
+// from browser Notification permission, which stays 'granted' forever once
+// given and can't be revoked from JS. This is what the on/off toggle reflects.
+export async function isPushRegistered(uid: string): Promise<boolean> {
+  const token = await getExistingToken();
+  if (!token) {
+    return false;
+  }
+  const profile = await getUserProfile(uid);
+  const tokens: string[] = profile?.fcmTokens || [];
+  return tokens.includes(token);
+}
+
+// Counterpart to registerForPush: invalidates this device's token and drops
+// it from the user's profile so the server stops sending to it. Browser
+// permission itself is untouched (can't be revoked from JS) — re-enabling
+// later just registers a fresh token, no re-prompt needed.
+export async function unregisterForPush(uid: string): Promise<void> {
+  const token = await getExistingToken();
+  const messaging = await getFirebaseMessaging();
+  if (messaging) {
+    try {
+      await deleteToken(messaging);
+    } catch {
+      // best-effort: still remove the token from Firestore below
+    }
+  }
+  if (token) {
+    await saveUserProfile(uid, { fcmTokens: arrayRemove(token) });
+  }
 }
 
 export async function listenForForegroundNotifications(handler: ForegroundNotificationHandler) {

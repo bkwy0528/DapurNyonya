@@ -11,8 +11,7 @@ import { toast } from 'sonner';
 import { User } from '../../App';
 import { getSettings, saveSettings } from '../../utils/db';
 import { DEFAULT_BATCH_PAYMENT_WINDOW_HOURS, getBatchPaymentWindowHours } from '../../utils/batchOrders';
-import { getNotificationSupport, registerForPush } from '../../utils/notifications';
-import { sendTestNotificationToSelf } from '../../utils/submitOrder';
+import { getNotificationSupport, isPushRegistered, registerForPush, unregisterForPush } from '../../utils/notifications';
 
 interface AdminSettingsPageProps {
   user: User;
@@ -30,14 +29,20 @@ export default function AdminSettingsPage({ user }: AdminSettingsPageProps) {
   const [batchPaymentWindowHours, setBatchPaymentWindowHours] = useState(String(DEFAULT_BATCH_PAYMENT_WINDOW_HOURS));
   const [notifSupported, setNotifSupported] = useState(true);
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>('default');
+  const [notifRegistered, setNotifRegistered] = useState(false);
   const [notifBusy, setNotifBusy] = useState(false);
-  const [testSendBusy, setTestSendBusy] = useState(false);
 
   useEffect(() => {
     getNotificationSupport().then(setNotifSupported);
-    if ('Notification' in window) setNotifPermission(Notification.permission);
-    else setNotifSupported(false);
-  }, []);
+    if ('Notification' in window) {
+      setNotifPermission(Notification.permission);
+      if (Notification.permission === 'granted') {
+        isPushRegistered(user.id).then(setNotifRegistered);
+      }
+    } else {
+      setNotifSupported(false);
+    }
+  }, [user.id]);
 
   const handleEnableNotifications = async () => {
     if (notifPermission === 'denied') {
@@ -48,6 +53,7 @@ export default function AdminSettingsPage({ user }: AdminSettingsPageProps) {
     try {
       const enabled = await registerForPush(user.id);
       setNotifPermission('Notification' in window ? Notification.permission : 'denied');
+      setNotifRegistered(enabled);
       if (enabled) toast.success('Notifications enabled!');
       else toast.error('Permission was not granted.');
     } catch (err: any) {
@@ -57,16 +63,22 @@ export default function AdminSettingsPage({ user }: AdminSettingsPageProps) {
     }
   };
 
-  const handleSendTestNotification = async () => {
-    setTestSendBusy(true);
+  const handleDisableNotifications = async () => {
+    setNotifBusy(true);
     try {
-      const result = await sendTestNotificationToSelf();
-      toast.success(`Test notification sent to ${result.sent} device(s). Check for it now.`);
+      await unregisterForPush(user.id);
+      setNotifRegistered(false);
+      toast.success('Notifications disabled.');
     } catch (err: any) {
-      toast.error(err.message || 'Could not send test notification.');
+      toast.error(err.message || 'Could not disable notifications.');
     } finally {
-      setTestSendBusy(false);
+      setNotifBusy(false);
     }
+  };
+
+  const handleToggleNotifications = (checked: boolean) => {
+    if (checked) handleEnableNotifications();
+    else handleDisableNotifications();
   };
 
   useEffect(() => {
@@ -213,26 +225,13 @@ export default function AdminSettingsPage({ user }: AdminSettingsPageProps) {
               <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border">
                 <div className="space-y-1">
                   <Label className="text-base">Enable for this account</Label>
-                  <p className="text-sm text-gray-600">Required before you can send yourself a test notification below.</p>
+                  <p className="text-sm text-gray-600">Get push notifications for new orders and order updates on this device.</p>
                 </div>
                 <Switch
-                  checked={notifPermission === 'granted'}
-                  disabled={notifBusy || notifPermission === 'granted'}
-                  onCheckedChange={handleEnableNotifications}
+                  checked={notifRegistered}
+                  disabled={notifBusy}
+                  onCheckedChange={handleToggleNotifications}
                 />
-              </div>
-              <div className="space-y-2">
-                <Button
-                  variant="outline"
-                  onClick={handleSendTestNotification}
-                  disabled={testSendBusy || notifPermission !== 'granted'}
-                >
-                  Send test notification to myself
-                </Button>
-                <p className="text-sm text-gray-600">
-                  Sends a real push to this account's enabled device(s) — use this to confirm notifications actually
-                  arrive before relying on them for customers.
-                </p>
               </div>
             </CardContent>
           </Card>
@@ -251,7 +250,7 @@ export default function AdminSettingsPage({ user }: AdminSettingsPageProps) {
               </div>
               <div className="bg-white rounded-lg p-4 border border-orange-200">
                 <p className="text-sm text-gray-600">Last Updated</p>
-                <p className="text-lg font-semibold text-gray-900">Jun 2026</p>
+                <p className="text-lg font-semibold text-gray-900">July 2026</p>
               </div>
             </div>
           </CardContent>
