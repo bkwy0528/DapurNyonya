@@ -43,9 +43,6 @@ interface Product {
   unit: string;
   prepDays: number;
   available: boolean;
-  // Exempt from the bulk-order minimum (e.g. bottled items) — small quantities
-  // of this product alone may still pick any collection date at checkout
-  bulkExempt?: boolean;
   // Batch/MOQ production: this product skips the normal cart/checkout flow
   // entirely. Customers pre-order against an admin-opened production date
   // (Production Calendar) and pay nothing until the minimum quantity is met.
@@ -94,7 +91,6 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
     unit: '',
     prepDays: '3',
     available: true,
-    bulkExempt: false,
     batchTracked: false,
   });
   const [ingredients, setIngredients] = useState<ProductIngredient[]>([]);
@@ -263,7 +259,6 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
       unit: product.unit,
       prepDays: String(product.prepDays || 3),
       available: product.available,
-      bulkExempt: product.bulkExempt ?? false,
       batchTracked: product.batchTracked ?? false,
     });
     setIngredients(product.ingredients || []);
@@ -301,7 +296,7 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
   };
 
   const resetForm = () => {
-    setFormData({ name: '', description: '', price: '', image: '', unit: '', prepDays: '3', available: true, bulkExempt: false, batchTracked: false });
+    setFormData({ name: '', description: '', price: '', image: '', unit: '', prepDays: '3', available: true, batchTracked: false });
     setIngredients([]);
     setImagePreview('');
     setEditingProduct(null);
@@ -475,22 +470,11 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
 
               <div className="flex items-center justify-between gap-4 p-4 bg-gray-50 rounded-lg">
                 <div className="space-y-1">
-                  <Label htmlFor="bulkExempt">No Minimum Quantity</Label>
-                  <p className="text-xs text-gray-500">
-                    For pre-packed items (e.g. a bottle of kueh tarts). Small orders of this product can pick any
-                    collection date instead of the fixed days set in Business Settings.
-                  </p>
-                </div>
-                <Switch id="bulkExempt" checked={formData.bulkExempt} onCheckedChange={(checked) => setFormData(prev => ({ ...prev, bulkExempt: checked }))} />
-              </div>
-
-              <div className="flex items-center justify-between gap-4 p-4 bg-gray-50 rounded-lg">
-                <div className="space-y-1">
                   <Label htmlFor="batchTracked">Batch Production (Minimum Order Quantity)</Label>
                   <p className="text-xs text-gray-500">
                     This product is only made once enough customers pre-order for a specific production date.
                     Customers won't pay until the minimum is reached — manage dates in Pre-Orders instead of the
-                    normal checkout flow. Product Management's other ordering rules above don't apply to it.
+                    normal checkout flow.
                   </p>
                 </div>
                 <Switch id="batchTracked" checked={formData.batchTracked} onCheckedChange={(checked) => setFormData(prev => ({ ...prev, batchTracked: checked }))} />
@@ -551,7 +535,7 @@ export default function ProductManagementPage({ user: _user }: ProductManagement
                       </div>
                       <div>
                         <p className="text-sm text-gray-600">Ordering</p>
-                        <p className="font-semibold text-gray-900">{product.batchTracked ? 'Batch pre-order (MOQ)' : product.bulkExempt ? 'No minimum quantity' : 'Counts toward bulk minimum'}</p>
+                        <p className="font-semibold text-gray-900">{product.batchTracked ? 'Batch pre-order (MOQ)' : 'Regular checkout'}</p>
                       </div>
                     </div>
                     <div className="flex flex-col sm:flex-row gap-3 pt-2">

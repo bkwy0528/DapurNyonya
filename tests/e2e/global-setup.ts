@@ -49,6 +49,16 @@ export default async function globalSetup() {
   await createUserWithEmailAndPassword(auth, ADMIN_EMAIL, ADMIN_PASSWORD);
   await Promise.all(DEFAULT_PRODUCTS.map((p) => setDoc(doc(db, 'products', p.id), p)));
 
+  // General-product ordering is closed until the admin opens a date window
+  // (see openOrderRanges in src/app/utils/business.ts) — seed one covering the
+  // whole test run so specs that complete checkout don't need to configure it
+  // themselves.
+  const farFuture = new Date();
+  farFuture.setFullYear(farFuture.getFullYear() + 1);
+  await setDoc(doc(db, 'settings', 'business'), {
+    openOrderRanges: [{ start: '2020-01-01', end: farFuture.toISOString().slice(0, 10) }],
+  });
+
   await terminate(db);
   await deleteApp(app);
 }

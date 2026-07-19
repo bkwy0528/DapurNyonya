@@ -6,18 +6,13 @@ import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
 import { Button } from '../../components/ui/button';
 import { Switch } from '../../components/ui/switch';
-import { Calendar as CalendarPicker } from '../../components/ui/calendar';
-import { ArrowLeft, Settings, Save, Calendar as CalendarIcon, Bell } from 'lucide-react';
+import { ArrowLeft, Settings, Save, Bell } from 'lucide-react';
 import { toast } from 'sonner';
 import { User } from '../../App';
 import { getSettings, saveSettings } from '../../utils/db';
-import { DEFAULT_ORDERING_RULES, normalizeOrderingRules, toLocalYMD, WEEKDAY_LABELS } from '../../utils/business';
 import { DEFAULT_BATCH_PAYMENT_WINDOW_HOURS, getBatchPaymentWindowHours } from '../../utils/batchOrders';
 import { getNotificationSupport, registerForPush } from '../../utils/notifications';
 import { sendTestNotificationToSelf } from '../../utils/submitOrder';
-
-// Monday-first display order for the collection-day picker (values are JS getDay())
-const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
 interface AdminSettingsPageProps {
   user: User;
@@ -32,11 +27,6 @@ export default function AdminSettingsPage({ user }: AdminSettingsPageProps) {
   const [announcementEnabled, setAnnouncementEnabled] = useState(true);
   const [announcementTitle, setAnnouncementTitle] = useState('Festive Season Orders Open!');
   const [announcementText, setAnnouncementText] = useState('Place your orders now for the upcoming celebrations. Limited slots available!');
-  const [bulkMinQuantity, setBulkMinQuantity] = useState(String(DEFAULT_ORDERING_RULES.bulkMinQuantity));
-  const [smallOrderWeekdays, setSmallOrderWeekdays] = useState<number[]>(DEFAULT_ORDERING_RULES.smallOrderWeekdays);
-  const [seasonStart, setSeasonStart] = useState('');
-  const [seasonEnd, setSeasonEnd] = useState('');
-  const [openSeasonPicker, setOpenSeasonPicker] = useState<'start' | 'end' | null>(null);
   const [batchPaymentWindowHours, setBatchPaymentWindowHours] = useState(String(DEFAULT_BATCH_PAYMENT_WINDOW_HOURS));
   const [notifSupported, setNotifSupported] = useState(true);
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>('default');
@@ -90,44 +80,11 @@ export default function AdminSettingsPage({ user }: AdminSettingsPageProps) {
       if (s.announcementEnabled !== undefined) setAnnouncementEnabled(s.announcementEnabled);
       if (s.announcementTitle) setAnnouncementTitle(s.announcementTitle);
       if (s.announcementText) setAnnouncementText(s.announcementText);
-      const rules = normalizeOrderingRules(s.orderingRules);
-      setBulkMinQuantity(String(rules.bulkMinQuantity));
-      setSmallOrderWeekdays(rules.smallOrderWeekdays);
-      setSeasonStart(rules.seasonStart || '');
-      setSeasonEnd(rules.seasonEnd || '');
       setBatchPaymentWindowHours(String(getBatchPaymentWindowHours(s)));
     });
   }, []);
 
-  const toggleWeekday = (day: number) => {
-    setSmallOrderWeekdays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]);
-  };
-
-  // Native <input type="date"> renders inconsistently across mobile
-  // browsers (invisible placeholder in dark mode, blank control on some
-  // WebKit builds), so this pair uses the same custom CalendarPicker the
-  // checkout flow already relies on instead.
-  const formatSeasonDate = (ymd: string) =>
-    new Date(`${ymd}T00:00:00`).toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' });
-
   const handleSave = async () => {
-    const minQty = parseInt(bulkMinQuantity, 10);
-    if (isNaN(minQty) || minQty < 1) {
-      toast.error('Minimum units for flexible dates must be at least 1');
-      return;
-    }
-    if (smallOrderWeekdays.length === 0) {
-      toast.error('Select at least one collection day for small orders');
-      return;
-    }
-    if (!!seasonStart !== !!seasonEnd) {
-      toast.error('Set both a start and an end date for the festive season, or clear both');
-      return;
-    }
-    if (seasonStart && seasonEnd && seasonStart > seasonEnd) {
-      toast.error('The festive season start date must be on or before the end date');
-      return;
-    }
     const paymentWindowHours = parseInt(batchPaymentWindowHours, 10);
     if (isNaN(paymentWindowHours) || paymentWindowHours < 1) {
       toast.error('Batch payment window must be at least 1 hour');
@@ -143,12 +100,6 @@ export default function AdminSettingsPage({ user }: AdminSettingsPageProps) {
         announcementEnabled,
         announcementTitle,
         announcementText,
-        orderingRules: {
-          bulkMinQuantity: minQty,
-          smallOrderWeekdays,
-          seasonStart: seasonStart || null,
-          seasonEnd: seasonEnd || null,
-        },
         batchPaymentWindowHours: paymentWindowHours,
       });
     } catch {
@@ -234,104 +185,6 @@ export default function AdminSettingsPage({ user }: AdminSettingsPageProps) {
 
         <Card>
           <CardHeader>
-            <CardTitle>Ordering Rules</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="bulkMinQuantity" className="text-base">Minimum Units for Flexible Dates</Label>
-              <Input id="bulkMinQuantity" type="number" min="1" step="1" inputMode="numeric" value={bulkMinQuantity} onChange={(e) => setBulkMinQuantity(e.target.value)} className="h-12 text-base" />
-              <p className="text-sm text-gray-600">
-                Orders with fewer units than this can only choose the collection days below. Orders that meet the
-                minimum can pick any date. Products marked "No Minimum Quantity" in Product Management are not counted.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-base">Collection Days for Small Orders</Label>
-              <div className="flex flex-wrap gap-2">
-                {WEEKDAY_ORDER.map((day) => {
-                  const selected = smallOrderWeekdays.includes(day);
-                  return (
-                    <button
-                      key={day}
-                      type="button"
-                      onClick={() => toggleWeekday(day)}
-                      aria-pressed={selected}
-                      className={`h-11 px-4 rounded-full border-2 text-sm font-medium transition-colors ${
-                        selected
-                          ? 'border-orange-500 bg-orange-50 text-orange-700'
-                          : 'border-gray-200 bg-white text-gray-700 hover:border-orange-300'
-                      }`}
-                    >
-                      {WEEKDAY_LABELS[day].slice(0, 3)}
-                    </button>
-                  );
-                })}
-              </div>
-              <p className="text-sm text-gray-600">Small orders can only be collected on the selected day(s).</p>
-            </div>
-            <div className="space-y-2 rounded-lg border border-orange-200 bg-orange-50/50 p-4">
-              <Label className="text-base">Festive Season — Flexible Dates for Everyone</Label>
-              <p className="text-sm text-gray-600">
-                During this period (e.g. bak chang season) small orders can also pick any collection date, not just
-                the days above. Leave both dates empty when there is no festive season.
-              </p>
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div className="space-y-2 min-w-0">
-                  <Label className="text-sm text-gray-700">Season Starts</Label>
-                  <button
-                    type="button"
-                    onClick={() => setOpenSeasonPicker(openSeasonPicker === 'start' ? null : 'start')}
-                    className="h-12 w-full flex items-center justify-between rounded-md border border-input px-3 text-base bg-input-background"
-                  >
-                    <span className={seasonStart ? 'text-gray-900' : 'text-muted-foreground'}>
-                      {seasonStart ? formatSeasonDate(seasonStart) : 'Select date'}
-                    </span>
-                    <CalendarIcon className="w-4 h-4 text-gray-500 shrink-0" />
-                  </button>
-                  {openSeasonPicker === 'start' && (
-                    <div className="flex justify-center rounded-lg border border-gray-200 bg-white">
-                      <CalendarPicker
-                        mode="single"
-                        selected={seasonStart ? new Date(`${seasonStart}T00:00:00`) : undefined}
-                        onSelect={(d) => { setSeasonStart(d ? toLocalYMD(d) : ''); setOpenSeasonPicker(null); }}
-                      />
-                    </div>
-                  )}
-                </div>
-                <div className="space-y-2 min-w-0">
-                  <Label className="text-sm text-gray-700">Season Ends</Label>
-                  <button
-                    type="button"
-                    onClick={() => setOpenSeasonPicker(openSeasonPicker === 'end' ? null : 'end')}
-                    className="h-12 w-full flex items-center justify-between rounded-md border border-input px-3 text-base bg-input-background"
-                  >
-                    <span className={seasonEnd ? 'text-gray-900' : 'text-muted-foreground'}>
-                      {seasonEnd ? formatSeasonDate(seasonEnd) : 'Select date'}
-                    </span>
-                    <CalendarIcon className="w-4 h-4 text-gray-500 shrink-0" />
-                  </button>
-                  {openSeasonPicker === 'end' && (
-                    <div className="flex justify-center rounded-lg border border-gray-200 bg-white">
-                      <CalendarPicker
-                        mode="single"
-                        selected={seasonEnd ? new Date(`${seasonEnd}T00:00:00`) : undefined}
-                        onSelect={(d) => { setSeasonEnd(d ? toLocalYMD(d) : ''); setOpenSeasonPicker(null); }}
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
-              {(seasonStart || seasonEnd) && (
-                <Button variant="outline" size="sm" onClick={() => { setSeasonStart(''); setSeasonEnd(''); setOpenSeasonPicker(null); }}>
-                  Clear Festive Season
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
             <CardTitle>Batch Ordering</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -344,6 +197,10 @@ export default function AdminSettingsPage({ user }: AdminSettingsPageProps) {
                 dates and their Min/Max quantities in Pre-Orders.
               </p>
             </div>
+            <p className="text-sm text-gray-600">
+              To control which dates customers can order regular (non-batch) products for, see "General Order
+              Availability" on the Pre-Orders page.
+            </p>
           </CardContent>
         </Card>
 

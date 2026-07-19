@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -9,11 +9,11 @@ import { Textarea } from '../../components/ui/textarea';
 import { ArrowLeft, MapPin, Truck, Home as HomeIcon, Calendar, Smartphone, Building2, CheckCircle2 } from 'lucide-react';
 import { Calendar as CalendarPicker } from '../../components/ui/calendar';
 import { useCart } from '../../context/CartContext';
-import { DEFAULT_ORDERING_RULES, getBulkOrderStatus, getLimitForDate, getMaxPrepDaysFromCart, isSmallOrderDateAllowed, normalizeOrderingRules, toLocalYMD, WEEKDAY_LABELS } from '../../utils/business';
+import { OrderWindow, getLimitForDate, getMaxPrepDaysFromCart, isDateOrderable, normalizeOpenOrderRanges, normalizeOrderLeadBufferDays, toLocalYMD } from '../../utils/business';
 import { User } from '../../App';
 import PageContainer from '../../components/ui/PageContainer';
 import FormSection from '../../components/ui/FormSection';
-import { getDailyLimits, getOrderCountForDate, getProducts, getSettings } from '../../utils/db';
+import { getDailyLimits, getOrderCountForDate, getSettings } from '../../utils/db';
 
 // Cash was removed on the admin's request — every order is paid online before
 // it exists, which is also what lets orders skip the old approval step.
@@ -42,35 +42,30 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
   const errorBoxRef = useRef<HTMLDivElement>(null);
 
   const [minPrepDays] = useState(() => Math.max(1, getMaxPrepDaysFromCart(cartItems)));
-  const [minDate] = useState(() => {
-    const days = Math.max(1, getMaxPrepDaysFromCart(cartItems));
-    const min = new Date();
-    min.setDate(min.getDate() + days);
-    return toLocalYMD(min);
-  });
 
-  // Bulk-order scheduling rule: small orders may only pick the configured
-  // collection weekdays. Exempt products come from the live catalogue so carts
-  // saved before a product was flagged still follow the current rule.
-  const [orderingRules, setOrderingRules] = useState(DEFAULT_ORDERING_RULES);
-  const [exemptProductIds, setExemptProductIds] = useState<Set<string>>(new Set());
+  // Orders are only accepted on admin-opened date windows (configured on the
+  // Pre-Orders page) — closed by default until at least one is added.
+  const [openOrderRanges, setOpenOrderRanges] = useState<OrderWindow[]>([]);
+  // Extra whole days the admin adds on top of each item's own prep time (see
+  // "Extra advance-notice buffer" on the Pre-Orders page) — guarantees a gap
+  // between payment and the start of prep beyond just the item's own prepDays.
+  const [orderLeadBufferDays, setOrderLeadBufferDays] = useState(0);
 
   useEffect(() => {
-    Promise.all([getSettings(), getProducts()])
-      .then(([s, products]) => {
-        setOrderingRules(normalizeOrderingRules(s?.orderingRules));
-        setExemptProductIds(new Set(products.filter((p: any) => p.bulkExempt).map((p: any) => p.id)));
+    getSettings()
+      .then(s => {
+        setOpenOrderRanges(normalizeOpenOrderRanges(s?.openOrderRanges));
+        setOrderLeadBufferDays(normalizeOrderLeadBufferDays(s?.orderLeadBufferDays));
       })
       .catch(() => { /* defaults already applied */ });
   }, []);
 
-  const { countedUnits, restrictedToWeekdays } = getBulkOrderStatus(cartItems, orderingRules, exemptProductIds);
-  const allowedDaysLabel = [...orderingRules.smallOrderWeekdays].sort().map(d => `${WEEKDAY_LABELS[d]}s`).join(' or ');
-  // Mention the festive season window only while dates inside it can still be
-  // picked — once it has fully passed it would just confuse customers.
-  const seasonLabel = orderingRules.seasonStart && orderingRules.seasonEnd && orderingRules.seasonEnd >= toLocalYMD(new Date())
-    ? `${new Date(`${orderingRules.seasonStart}T00:00:00`).toLocaleDateString('en-MY', { day: 'numeric', month: 'long' })} – ${new Date(`${orderingRules.seasonEnd}T00:00:00`).toLocaleDateString('en-MY', { day: 'numeric', month: 'long', year: 'numeric' })}`
-    : null;
+  const effectiveLeadDays = minPrepDays + orderLeadBufferDays;
+  const minDate = useMemo(() => {
+    const min = new Date();
+    min.setDate(min.getDate() + effectiveLeadDays);
+    return toLocalYMD(min);
+  }, [effectiveLeadDays]);
 
   useEffect(() => {
     if (cartItems.length === 0) navigate('/customer/cart');
@@ -103,9 +98,9 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
       errors.push('Please select a pickup/delivery date');
     } else if (deliveryDate < minDate) {
       // The calendar disables these, but guard against a stale selection
-      errors.push(`The earliest available date is ${new Date(`${minDate}T00:00:00`).toLocaleDateString('en-MY', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} — your items need ${minPrepDays} day${minPrepDays !== 1 ? 's' : ''} to prepare`);
-    } else if (restrictedToWeekdays && !isSmallOrderDateAllowed(new Date(`${deliveryDate}T00:00:00`), orderingRules)) {
-      errors.push(`Orders under ${orderingRules.bulkMinQuantity} units can only be collected on ${allowedDaysLabel}${seasonLabel ? ` (or any date during the festive season, ${seasonLabel})` : ''} — please pick an available date on the calendar, or add more items to unlock all dates`);
+      errors.push(`The earliest available date is ${new Date(`${minDate}T00:00:00`).toLocaleDateString('en-MY', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} — orders need at least ${effectiveLeadDays} day${effectiveLeadDays !== 1 ? 's' : ''} advance notice`);
+    } else if (!isDateOrderable(deliveryDate, openOrderRanges)) {
+      errors.push('The selected date is not currently open for ordering — please pick a highlighted date on the calendar');
     }
     if (deliveryMethod === 'delivery' && !deliveryAddress) errors.push('Please fill in your delivery address');
     if (deliveryMethod === 'delivery' && !postalCode) errors.push('Please fill in your postal code');
@@ -183,13 +178,18 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
           <CardContent className="space-y-4">
             <FormSection>
               <Label className="text-base">Select Date *</Label>
-              {restrictedToWeekdays && (
+              {openOrderRanges.length === 0 ? (
+                <div className="alert-box">
+                  <p className="text-sm text-red-800">
+                    Ordering is currently closed — no dates are available yet. Please check back soon.
+                  </p>
+                </div>
+              ) : (
                 <div className="info-box">
                   <p className="text-sm text-blue-900">
-                    <strong>Small order ({countedUnits} unit{countedUnits !== 1 ? 's' : ''}):</strong> orders under{' '}
-                    {orderingRules.bulkMinQuantity} units are collected on {allowedDaysLabel} only
-                    {seasonLabel ? <>, plus any date during the festive season ({seasonLabel})</> : null}. Add more
-                    items to reach {orderingRules.bulkMinQuantity} units and choose any date.
+                    <strong>Available dates:</strong> {openOrderRanges.map(r =>
+                      `${new Date(`${r.start}T00:00:00`).toLocaleDateString('en-MY', { day: 'numeric', month: 'long' })} – ${new Date(`${r.end}T00:00:00`).toLocaleDateString('en-MY', { day: 'numeric', month: 'long', year: 'numeric' })}`
+                    ).join(', ')}
                   </p>
                 </div>
               )}
@@ -202,7 +202,7 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
                   fromDate={new Date(`${minDate}T00:00:00`)}
                   disabled={[
                     { before: new Date(`${minDate}T00:00:00`) },
-                    ...(restrictedToWeekdays ? [(date: Date) => !isSmallOrderDateAllowed(date, orderingRules)] : []),
+                    (date: Date) => !isDateOrderable(toLocalYMD(date), openOrderRanges),
                   ]}
                 />
               </div>
@@ -211,7 +211,7 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
                   Selected: {new Date(`${deliveryDate}T00:00:00`).toLocaleDateString('en-MY', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                 </p>
               )}
-              <p className="text-base text-gray-700">Items in your cart require at least {minPrepDays} day{minPrepDays !== 1 ? 's' : ''} advance notice</p>
+              <p className="text-base text-gray-700">Orders require at least {effectiveLeadDays} day{effectiveLeadDays !== 1 ? 's' : ''} advance notice</p>
               {dateCapacity && dateCapacity.limit > 0 && (
                 dateCapacity.count >= dateCapacity.limit
                   ? <p className="text-sm text-red-600">Selected date is fully booked. Please choose another date.</p>

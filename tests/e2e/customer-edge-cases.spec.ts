@@ -90,33 +90,16 @@ test.describe('checkout — validation', () => {
     await expect(page).toHaveURL(/\/customer\/checkout$/);
   });
 
-  test('small orders are restricted to the configured collection days', async ({ page }) => {
-    await registerCustomer(page, 'Small Order Customer');
+  test('orders can pick any date inside the admin-opened window', async ({ page }) => {
+    await registerCustomer(page, 'Order Window Customer');
     await page.goto('/customer/order/1'); // Traditional Dumplings — prepDays: 3
     await page.getByRole('button', { name: 'Add to Cart' }).click();
     await page.getByRole('button', { name: 'Proceed to Checkout' }).click();
 
-    // 1 unit < default bulk minimum (20) — the rule explainer must show, and
-    // the first selectable calendar day must be a default collection day
-    // (Saturday), which also proves earlier-than-prep-time days are disabled.
-    await expect(page.getByText(/Small order/)).toBeVisible();
-    await selectFirstAvailableCalendarDate(page);
-    await expect(page.getByText(/Selected: Saturday/)).toBeVisible();
-  });
-
-  test('orders meeting the bulk minimum can pick any available date', async ({ page }) => {
-    await registerCustomer(page, 'Bulk Order Customer');
-    await page.goto('/customer/order/1');
-    // Type 20 — the default bulk minimum — straight into the quantity field
-    // (the same affordance that saves real bulk customers 19 "+" presses).
-    await page.getByRole('textbox', { name: 'Quantity' }).fill('20');
-    await page.getByRole('button', { name: 'Add to Cart' }).click();
-    await page.getByRole('button', { name: 'Proceed to Checkout' }).click();
-
-    // No small-order restriction: the explainer is gone and the first
-    // selectable day is the prep-time minimum (3 days out), whatever weekday
-    // that happens to be.
-    await expect(page.getByText(/Small order/)).not.toBeVisible();
+    // global-setup seeds a wide-open date window, so the first selectable day
+    // is just the prep-time minimum (3 days out), whatever weekday that is —
+    // this also proves earlier-than-prep-time days are disabled.
+    await expect(page.getByText(/Available dates/)).toBeVisible();
     await selectFirstAvailableCalendarDate(page);
     await expect(page.getByText(/Selected: /)).toBeVisible();
   });

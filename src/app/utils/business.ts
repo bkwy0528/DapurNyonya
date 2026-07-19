@@ -25,32 +25,19 @@ export function getMaxPrepDaysFromCart(cartItems: any[]) {
   return cartItems.reduce((max: number, item: any) => Math.max(max, item.prepDays || 1), 1);
 }
 
-// ─── Ordering rules for preorder scheduling ──────────────────────────────────
+// ─── Open order date ranges (preorder scheduling) ────────────────────────────
 //
-// Small orders are batched onto fixed weekly collection days; orders that meet
-// the bulk minimum may pick any date (prep time permitting). During the
-// festive season window (e.g. bak chang season, when production runs daily)
-// delivery dates inside the window are open to small orders too. The
-// thresholds live in settings/business under `orderingRules` so the admin can
-// change them without a code release. Products marked `bulkExempt` (e.g.
-// bottled kueh tarts sold as a jar of 20) neither count toward the minimum nor
-// restrict the date — a cart of only exempt items may pick any day.
+// General (non-batch-tracked) product orders are only accepted on dates that
+// fall inside one of these admin-configured windows — closed by default until
+// at least one window is added on the Production Calendar page. Batch-tracked
+// products are unaffected; they use their own production-date flow. Ranges
+// live in settings/business under `openOrderRanges` so the admin can change
+// them without a code release.
 
-export interface OrderingRules {
-  bulkMinQuantity: number; // units in the cart needed to unlock flexible dates
-  smallOrderWeekdays: number[]; // allowed collection days for small orders, JS getDay() values (0=Sun … 6=Sat)
-  seasonStart: string | null; // festive season window, YYYY-MM-DD inclusive; both null = off
-  seasonEnd: string | null;
+export interface OrderWindow {
+  start: string; // YYYY-MM-DD inclusive
+  end: string; // YYYY-MM-DD inclusive
 }
-
-export const DEFAULT_ORDERING_RULES: OrderingRules = {
-  bulkMinQuantity: 20,
-  smallOrderWeekdays: [6], // Saturdays
-  seasonStart: null,
-  seasonEnd: null,
-};
-
-export const WEEKDAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 const YMD_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -61,34 +48,28 @@ export function toLocalYMD(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
-export function normalizeOrderingRules(raw: any): OrderingRules {
-  const minQty = Number(raw?.bulkMinQuantity);
-  const weekdays = Array.isArray(raw?.smallOrderWeekdays)
-    ? raw.smallOrderWeekdays.map(Number).filter((d: number) => Number.isInteger(d) && d >= 0 && d <= 6)
-    : [];
-  // The season only counts when both ends are valid dates in order — a
-  // half-filled or inverted window behaves as if no season were set.
-  const start = typeof raw?.seasonStart === 'string' && YMD_PATTERN.test(raw.seasonStart) ? raw.seasonStart : null;
-  const end = typeof raw?.seasonEnd === 'string' && YMD_PATTERN.test(raw.seasonEnd) ? raw.seasonEnd : null;
-  const seasonValid = start !== null && end !== null && start <= end;
-  return {
-    bulkMinQuantity: Number.isFinite(minQty) && minQty > 0 ? Math.floor(minQty) : DEFAULT_ORDERING_RULES.bulkMinQuantity,
-    smallOrderWeekdays: weekdays.length > 0 ? weekdays : DEFAULT_ORDERING_RULES.smallOrderWeekdays,
-    seasonStart: seasonValid ? start : null,
-    seasonEnd: seasonValid ? end : null,
-  };
+// Drops any entry with a malformed or inverted (end before start) range
+// rather than failing the whole list, so one bad entry can't lock out every
+// other configured window.
+export function normalizeOpenOrderRanges(raw: any): OrderWindow[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((r: any) => r && YMD_PATTERN.test(r?.start) && YMD_PATTERN.test(r?.end) && r.start <= r.end)
+    .map((r: any) => ({ start: r.start, end: r.end }));
 }
 
 // YYYY-MM-DD strings compare correctly as strings, so no Date parsing needed.
-export function isDateInSeason(dateKey: string, rules: OrderingRules) {
-  return rules.seasonStart !== null && rules.seasonEnd !== null
-    && dateKey >= rules.seasonStart && dateKey <= rules.seasonEnd;
+export function isDateOrderable(dateKey: string, ranges: OrderWindow[]) {
+  return ranges.some(r => dateKey >= r.start && dateKey <= r.end);
 }
 
-// A small (weekday-restricted) order may still take any date that falls inside
-// the festive season window.
-export function isSmallOrderDateAllowed(date: Date, rules: OrderingRules) {
-  return rules.smallOrderWeekdays.includes(date.getDay()) || isDateInSeason(toLocalYMD(date), rules);
+// Extra whole days added on top of a product's own prepDays before a delivery
+// date becomes selectable — e.g. a buffer of 1 guarantees at least one full
+// day between the customer paying and prep starting, on top of however long
+// the item itself takes to prepare. 0 means "no extra buffer" (default).
+export function normalizeOrderLeadBufferDays(raw: any): number {
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
 }
 
 // ─── Daily capacity limits ───────────────────────────────────────────────────
@@ -104,18 +85,4 @@ export const DEFAULT_DAILY_LIMIT_KEY = '_default';
 // 0 means unlimited (no cap set for that date).
 export function getLimitForDate(limits: Record<string, number>, dateKey: string): number {
   return limits[dateKey] ?? limits[DEFAULT_DAILY_LIMIT_KEY] ?? 0;
-}
-
-// `exemptProductIds` comes from the live product catalogue rather than the
-// cart items themselves, so carts saved before a product was flagged still
-// follow the current rule.
-export function getBulkOrderStatus(cartItems: any[], rules: OrderingRules, exemptProductIds: Set<string>) {
-  const countedUnits = (cartItems || [])
-    .filter(item => !exemptProductIds.has(item.productId))
-    .reduce((sum: number, item: any) => sum + (item.quantity || 0), 0);
-  return {
-    countedUnits,
-    // Carts of only exempt items (countedUnits 0) are never restricted
-    restrictedToWeekdays: countedUnits > 0 && countedUnits < rules.bulkMinQuantity,
-  };
 }

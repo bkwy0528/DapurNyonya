@@ -4,12 +4,11 @@ import {
   getDateKey,
   generateFinalOrderNumber,
   getMaxPrepDaysFromCart,
-  normalizeOrderingRules,
-  isDateInSeason,
-  isSmallOrderDateAllowed,
+  normalizeOpenOrderRanges,
+  isDateOrderable,
+  normalizeOrderLeadBufferDays,
   getLimitForDate,
   DEFAULT_DAILY_LIMIT_KEY,
-  DEFAULT_ORDERING_RULES,
 } from '../../src/app/utils/business';
 
 describe('validatePassword', () => {
@@ -78,80 +77,77 @@ describe('getMaxPrepDaysFromCart', () => {
   });
 });
 
-describe('normalizeOrderingRules — festive season window', () => {
-  it('defaults to no season when the settings doc has none', () => {
-    const rules = normalizeOrderingRules({ bulkMinQuantity: 20, smallOrderWeekdays: [6] });
-    expect(rules.seasonStart).toBeNull();
-    expect(rules.seasonEnd).toBeNull();
+describe('normalizeOpenOrderRanges', () => {
+  it('defaults to no open ranges (closed) when the settings doc has none', () => {
+    expect(normalizeOpenOrderRanges(undefined)).toEqual([]);
+    expect(normalizeOpenOrderRanges(null)).toEqual([]);
   });
 
-  it('keeps a valid season window', () => {
-    const rules = normalizeOrderingRules({ seasonStart: '2026-06-01', seasonEnd: '2026-06-19' });
-    expect(rules.seasonStart).toBe('2026-06-01');
-    expect(rules.seasonEnd).toBe('2026-06-19');
+  it('keeps a valid range', () => {
+    const ranges = normalizeOpenOrderRanges([{ start: '2026-06-01', end: '2026-06-19' }]);
+    expect(ranges).toEqual([{ start: '2026-06-01', end: '2026-06-19' }]);
   });
 
-  it('accepts a single-day season (start equals end)', () => {
-    const rules = normalizeOrderingRules({ seasonStart: '2026-06-19', seasonEnd: '2026-06-19' });
-    expect(rules.seasonStart).toBe('2026-06-19');
+  it('accepts a single-day range (start equals end)', () => {
+    const ranges = normalizeOpenOrderRanges([{ start: '2026-06-19', end: '2026-06-19' }]);
+    expect(ranges).toEqual([{ start: '2026-06-19', end: '2026-06-19' }]);
   });
 
-  it('drops a half-filled window', () => {
-    const rules = normalizeOrderingRules({ seasonStart: '2026-06-01' });
-    expect(rules.seasonStart).toBeNull();
-    expect(rules.seasonEnd).toBeNull();
-  });
-
-  it('drops an inverted window (end before start)', () => {
-    const rules = normalizeOrderingRules({ seasonStart: '2026-06-19', seasonEnd: '2026-06-01' });
-    expect(rules.seasonStart).toBeNull();
-    expect(rules.seasonEnd).toBeNull();
+  it('drops an inverted range (end before start)', () => {
+    expect(normalizeOpenOrderRanges([{ start: '2026-06-19', end: '2026-06-01' }])).toEqual([]);
   });
 
   it('drops malformed dates', () => {
-    const rules = normalizeOrderingRules({ seasonStart: 'June 1', seasonEnd: '2026-06-19' });
-    expect(rules.seasonStart).toBeNull();
-    expect(rules.seasonEnd).toBeNull();
+    expect(normalizeOpenOrderRanges([{ start: 'June 1', end: '2026-06-19' }])).toEqual([]);
+  });
+
+  it('keeps valid ranges while dropping bad ones from the same list', () => {
+    const ranges = normalizeOpenOrderRanges([
+      { start: '2026-06-01', end: '2026-06-19' },
+      { start: '2026-07-19', end: '2026-07-01' },
+    ]);
+    expect(ranges).toEqual([{ start: '2026-06-01', end: '2026-06-19' }]);
   });
 });
 
-describe('isDateInSeason', () => {
-  const rules = normalizeOrderingRules({ seasonStart: '2026-06-01', seasonEnd: '2026-06-19' });
+describe('isDateOrderable', () => {
+  const ranges = normalizeOpenOrderRanges([{ start: '2026-06-01', end: '2026-06-19' }]);
 
   it('includes both boundary dates', () => {
-    expect(isDateInSeason('2026-06-01', rules)).toBe(true);
-    expect(isDateInSeason('2026-06-19', rules)).toBe(true);
+    expect(isDateOrderable('2026-06-01', ranges)).toBe(true);
+    expect(isDateOrderable('2026-06-19', ranges)).toBe(true);
   });
 
   it('excludes dates outside the window', () => {
-    expect(isDateInSeason('2026-05-31', rules)).toBe(false);
-    expect(isDateInSeason('2026-06-20', rules)).toBe(false);
+    expect(isDateOrderable('2026-05-31', ranges)).toBe(false);
+    expect(isDateOrderable('2026-06-20', ranges)).toBe(false);
   });
 
-  it('is always false when no season is set', () => {
-    expect(isDateInSeason('2026-06-10', DEFAULT_ORDERING_RULES)).toBe(false);
+  it('is always false when no ranges are configured (closed by default)', () => {
+    expect(isDateOrderable('2026-06-10', [])).toBe(false);
   });
 });
 
-describe('isSmallOrderDateAllowed', () => {
-  // Default weekdays = Saturdays only; season covers 1–19 June 2026.
-  const rules = normalizeOrderingRules({ seasonStart: '2026-06-01', seasonEnd: '2026-06-19' });
-
-  it('allows configured weekdays as before', () => {
-    expect(isSmallOrderDateAllowed(new Date(2026, 6, 18), rules)).toBe(true); // Sat 18 Jul, outside season
+describe('normalizeOrderLeadBufferDays', () => {
+  it('defaults to 0 (no extra buffer) when unset', () => {
+    expect(normalizeOrderLeadBufferDays(undefined)).toBe(0);
+    expect(normalizeOrderLeadBufferDays(null)).toBe(0);
   });
 
-  it('rejects other weekdays outside the season', () => {
-    expect(isSmallOrderDateAllowed(new Date(2026, 6, 15), rules)).toBe(false); // Wed 15 Jul
+  it('keeps a valid whole-day buffer', () => {
+    expect(normalizeOrderLeadBufferDays(2)).toBe(2);
   });
 
-  it('allows any weekday inside the season', () => {
-    expect(isSmallOrderDateAllowed(new Date(2026, 5, 10), rules)).toBe(true); // Wed 10 Jun
+  it('floors a fractional value', () => {
+    expect(normalizeOrderLeadBufferDays(2.9)).toBe(2);
   });
 
-  it('without a season, only the configured weekdays pass', () => {
-    expect(isSmallOrderDateAllowed(new Date(2026, 5, 10), DEFAULT_ORDERING_RULES)).toBe(false);
-    expect(isSmallOrderDateAllowed(new Date(2026, 5, 13), DEFAULT_ORDERING_RULES)).toBe(true); // Sat 13 Jun
+  it('rejects a negative buffer, falling back to 0', () => {
+    expect(normalizeOrderLeadBufferDays(-1)).toBe(0);
+  });
+
+  it('rejects non-numeric input, falling back to 0', () => {
+    expect(normalizeOrderLeadBufferDays('not a number')).toBe(0);
   });
 });
 

@@ -38,9 +38,9 @@ export function deliveryDateDaysFromNow(days: number): string {
 
 // Picks the first selectable day in the checkout calendar (react-day-picker),
 // which by construction satisfies both the prep-days minimum and the
-// small-order collection-day rule. Day cells are the only buttons whose text
-// is a bare number; disabled ones carry the `disabled` attribute. Advances up
-// to two months in case the current view has no selectable day left.
+// admin-configured open order window. Day cells are the only buttons whose
+// text is a bare number; disabled ones carry the `disabled` attribute.
+// Advances up to two months in case the current view has no selectable day left.
 export async function selectFirstAvailableCalendarDate(page: Page): Promise<void> {
   for (let attempt = 0; attempt < 3; attempt++) {
     const enabledDays = page.locator('.rdp button:not([disabled])', { hasText: /^\d+$/ });

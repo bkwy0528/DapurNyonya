@@ -111,8 +111,11 @@ export async function getSettings(): Promise<any> {
   return snap.exists() ? snap.data() : null;
 }
 
+// Merge rather than overwrite — AdminSettingsPage and ProductionCalendarPage
+// each save only the fields they own, so a full-document setDoc would let
+// whichever page saves last silently wipe out the other's fields.
 export async function saveSettings(settings: any): Promise<void> {
-  await setDoc(doc(db, 'settings', 'business'), settings);
+  await setDoc(doc(db, 'settings', 'business'), settings, { merge: true });
 }
 
 // ─── Production Batches (batch/MOQ ordering) ────────────────────────────────
