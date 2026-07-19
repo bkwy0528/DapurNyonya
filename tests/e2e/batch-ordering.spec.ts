@@ -79,8 +79,10 @@ test.describe('batch/MOQ production ordering', () => {
     await expect(adminPage.getByText('Confirmed — payment open')).toBeVisible();
     await expect(adminPage.getByText('5 / 5')).toBeVisible();
     await adminPage.getByRole('button', { name: /2 orders/ }).click();
-    await expect(adminPage.getByText('Batch Customer A — 3 piece')).toBeVisible();
-    await expect(adminPage.getByText('Batch Customer B — 2 piece')).toBeVisible();
+    // The expanded row reads "{customer} — {qty} {product name}" (the label
+    // switched from unit to product name in the pre-order label fixes).
+    await expect(adminPage.getByText('Batch Customer A — 3 Test Chang')).toBeVisible();
+    await expect(adminPage.getByText('Batch Customer B — 2 Test Chang')).toBeVisible();
 
     // Clicking through to pay hands off to ToyyibPay's hosted page, same
     // emulator boundary as the regular checkout flow — reaching the payment
@@ -248,7 +250,7 @@ test.describe('batch/MOQ production ordering', () => {
     const refreshedCard = adminPage.locator('div.rounded-lg.border', { hasText: 'Admin Chang' });
     await expect(refreshedCard.getByText('4 / 10')).toBeVisible();
     await refreshedCard.getByRole('button', { name: /1 order/ }).click();
-    await expect(refreshedCard.getByText('Cancelled Customer — 4 piece')).toBeVisible();
+    await expect(refreshedCard.getByText('Cancelled Customer — 4 Admin Chang')).toBeVisible();
     adminPage.once('dialog', (dialog) => dialog.accept());
     await refreshedCard.getByRole('button', { name: 'Cancel', exact: true }).click();
     await expect(refreshedCard.getByText('0 / 10')).toBeVisible();
