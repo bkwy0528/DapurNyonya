@@ -94,7 +94,7 @@ export default function NotificationBell({ userId, role }: { userId: string; rol
       </button>
 
       {open && (
-        <div className="absolute right-0 top-12 z-50 w-[min(90vw,22rem)] rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden">
+        <div className="fixed inset-x-3 top-16 z-50 rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 sm:w-[min(90vw,22rem)]">
           <div className="px-4 py-3 border-b border-gray-100">
             <p className="font-semibold text-gray-900">Notifications</p>
           </div>
