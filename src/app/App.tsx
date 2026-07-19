@@ -9,8 +9,7 @@ import { auth } from '../firebase';
 import { ADMIN_EMAILS, getAdminProfile, getUserProfile, saveUserProfile, getProducts, seedDefaultProducts } from './utils/db';
 import InstallAppPrompt from './components/pwa/InstallAppPrompt';
 import LoadingSpinner from './components/ui/LoadingSpinner';
-import { listenForForegroundNotifications } from './utils/notifications';
-import { toast } from 'sonner';
+import { listenForForegroundNotifications, showLocalNotification } from './utils/notifications';
 
 // Import Pages
 import WelcomePage from './pages/WelcomePage';
@@ -65,7 +64,9 @@ function AppRoutes({ user, setUser, handleLogout, handleProfileUpdate }: AppRout
   }, [location.pathname]);
   // Foreground push (the app tab is focused when a message arrives) never
   // shows an OS notification on its own — only the background service
-  // worker does that — so it's surfaced as a toast instead.
+  // worker does that by default — so it's shown the same way explicitly here
+  // (see showLocalNotification) rather than only surfacing as an easy-to-miss
+  // in-page toast.
   useEffect(() => {
     if (!user) return;
     let unsubscribe: (() => void) | undefined;
@@ -73,8 +74,9 @@ function AppRoutes({ user, setUser, handleLogout, handleProfileUpdate }: AppRout
     listenForForegroundNotifications((payload: any) => {
       const title = payload?.notification?.title;
       const body = payload?.notification?.body;
+      const link = payload?.fcmOptions?.link || payload?.data?.link;
       if (title || body) {
-        toast(title || 'DapurNyonya', { description: body });
+        showLocalNotification(title || 'DapurNyonya', body || '', link);
       }
     }).then((unsub) => {
       if (cancelled) unsub();

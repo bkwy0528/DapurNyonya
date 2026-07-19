@@ -113,3 +113,25 @@ export async function listenForForegroundNotifications(handler: ForegroundNotifi
 
   return onMessage(messaging, handler);
 }
+
+// Foreground FCM messages don't trigger the browser's own notification UI —
+// only a push received while no tab is focused does that automatically (see
+// public/firebase-messaging-sw.js). To get the same OS-level popup while the
+// app is open, show it ourselves via the same service worker registration
+// used for push (Notification's plain constructor is unsupported on Android
+// Chrome — ServiceWorkerRegistration.showNotification is required there).
+export async function showLocalNotification(title: string, body: string, link?: string) {
+  if (!('serviceWorker' in navigator) || !('Notification' in window) || Notification.permission !== 'granted') {
+    return;
+  }
+  try {
+    const registration = await navigator.serviceWorker.register(PUSH_SW_URL, { scope: PUSH_SW_SCOPE });
+    await registration.showNotification(title, {
+      body,
+      icon: '/pwa/icon-192.png',
+      data: { link: link || '/' },
+    });
+  } catch {
+    // best-effort — a missed local notification isn't worth surfacing an error for
+  }
+}

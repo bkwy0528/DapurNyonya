@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 import { User } from '../App';
 import { saveUserProfile } from '../utils/db';
 import { compressImage } from '../utils/image';
-import { getNotificationSupport, registerForPush } from '../utils/notifications';
+import { getNotificationSupport, isPushRegistered, registerForPush, unregisterForPush } from '../utils/notifications';
 
 interface ProfilePageProps {
   user: User;
@@ -34,16 +34,20 @@ export default function ProfilePage({ user, onLogout, onProfileUpdate }: Profile
   const [profilePicture, setProfilePicture] = useState(user.profilePicture || '');
   const [notifSupported, setNotifSupported] = useState(true);
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>('default');
+  const [notifRegistered, setNotifRegistered] = useState(false);
   const [notifBusy, setNotifBusy] = useState(false);
 
   useEffect(() => {
     getNotificationSupport().then(setNotifSupported);
     if ('Notification' in window) {
       setNotifPermission(Notification.permission);
+      if (Notification.permission === 'granted') {
+        isPushRegistered(user.id).then(setNotifRegistered);
+      }
     } else {
       setNotifSupported(false);
     }
-  }, []);
+  }, [user.id]);
 
   const handleEnableNotifications = async () => {
     if (notifPermission === 'denied') {
@@ -54,6 +58,7 @@ export default function ProfilePage({ user, onLogout, onProfileUpdate }: Profile
     try {
       const enabled = await registerForPush(user.id);
       setNotifPermission('Notification' in window ? Notification.permission : 'denied');
+      setNotifRegistered(enabled);
       if (enabled) {
         toast.success('Notifications enabled! You\'ll be pushed order and pre-order updates.');
       } else {
@@ -64,6 +69,24 @@ export default function ProfilePage({ user, onLogout, onProfileUpdate }: Profile
     } finally {
       setNotifBusy(false);
     }
+  };
+
+  const handleDisableNotifications = async () => {
+    setNotifBusy(true);
+    try {
+      await unregisterForPush(user.id);
+      setNotifRegistered(false);
+      toast.success('Notifications disabled.');
+    } catch (err: any) {
+      toast.error(err.message || 'Could not disable notifications.');
+    } finally {
+      setNotifBusy(false);
+    }
+  };
+
+  const handleToggleNotifications = (checked: boolean) => {
+    if (checked) handleEnableNotifications();
+    else handleDisableNotifications();
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -181,15 +204,15 @@ export default function ProfilePage({ user, onLogout, onProfileUpdate }: Profile
                 <div>
                   <p className="font-medium text-gray-900">Order & pre-order updates</p>
                   <p className="text-sm text-gray-600">
-                    {notifPermission === 'granted'
+                    {notifRegistered
                       ? 'Enabled — you\'ll be notified when a pre-order is confirmed or your order status changes.'
                       : 'Get notified the moment a batch reaches minimum quantity or your order status changes.'}
                   </p>
                 </div>
                 <Switch
-                  checked={notifPermission === 'granted'}
-                  disabled={notifBusy || notifPermission === 'granted'}
-                  onCheckedChange={handleEnableNotifications}
+                  checked={notifRegistered}
+                  disabled={notifBusy}
+                  onCheckedChange={handleToggleNotifications}
                 />
               </div>
             </CardContent>

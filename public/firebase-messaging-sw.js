@@ -2,9 +2,10 @@
 // separate from the Workbox PWA service worker, so it doesn't conflict with
 // vite-plugin-pwa's generated sw.js at the default '/' scope. This SW's only
 // job is showing a notification for a push that arrives while no tab has the
-// app focused — foreground messages are handled in-page instead (onMessage
-// in notifications.ts), since a page-context notification would look
-// redundant next to whatever the app is already showing.
+// app focused. Foreground messages (tab open) are caught in-page instead
+// (onMessage in notifications.ts) and shown via this same registration's
+// showNotification (see showLocalNotification), so a push looks the same
+// whether or not the app happens to be open.
 importScripts('https://www.gstatic.com/firebasejs/12.13.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/12.13.0/firebase-messaging-compat.js');
 
