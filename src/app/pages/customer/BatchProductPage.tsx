@@ -193,10 +193,9 @@ export default function BatchProductPage({ user }: BatchProductPageProps) {
                     </div>
                     <Progress value={progressPct} className="h-2" />
                     <div className="flex items-center justify-between text-sm text-gray-600">
-                      <span>{batch.currentQuantity} / {batch.minQuantity} {product.unit}{remaining > 0 ? ` · need ${remaining} more` : ''}</span>
+                      <span>{batch.currentQuantity} / {batch.minQuantity} {product.name}{remaining > 0 ? ` · need ${remaining} more` : ''}</span>
                       <span className="flex items-center gap-1"><Users className="w-4 h-4" />{batch.orderCount} joined</span>
                     </div>
-                    {cap !== null && <p className="text-xs text-gray-500">{cap} left before this date is full</p>}
                   </div>
                 );
               })
@@ -309,7 +308,7 @@ export default function BatchProductPage({ user }: BatchProductPageProps) {
                 <Button size="lg" onClick={handlePlacePreOrder} disabled={submitting} className="w-full brand-button h-14 text-lg">
                   {submitting ? 'Placing Pre-Order…' : 'Place Pre-Order'}
                 </Button>
-                <p className="text-sm text-center text-gray-600">No payment now — you'll be notified when it's time to pay</p>
+                <p className="text-sm text-center text-gray-600">Payment done once the batch is confirmed — you'll be notified when it's time to pay</p>
               </CardContent>
             </Card>
           </>
