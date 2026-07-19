@@ -20,7 +20,7 @@ const messaging = getMessaging();
 // duplicated here because Cloud Functions can't reference Firestore rules.
 const ADMIN_EMAILS = ['yikbryan0528work@gmail.com', 'ksl_joyce@yahoo.com'];
 
-const TOYYIBPAY_BASE_URL = 'https://dev.toyyibpay.com';
+const TOYYIBPAY_BASE_URL = 'https://toyyibpay.com';
 
 // No Firestore order exists yet at bill-creation time — the order is only recorded
 // client-side after ToyyibPay confirms success on the return redirect (see
