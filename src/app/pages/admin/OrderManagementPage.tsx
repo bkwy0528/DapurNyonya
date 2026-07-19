@@ -73,10 +73,11 @@ export default function OrderManagementPage({ user: _user }: OrderManagementPage
 
   // Orders arrive already paid and numbered (submitOrder assigns the
   // finalized number server-side), so status moves only forward through the
-  // fulfilment steps — there is no approve/reject step anymore. Ingredient
-  // Planning's Required total already drops this order's items once its
-  // status leaves the "still needs preparation" set, so no separate stock
-  // deduction is needed here.
+  // fulfilment steps — there is no approve/reject step anymore. This write is
+  // also what the onOrderStatusChange Firestore trigger (functions/src/
+  // ingredientDeduction.ts) watches: moving into "Ready for Pickup"/"Out for
+  // Delivery" deducts this order's items from each ingredient's Purchased
+  // stock count server-side, so nothing extra is needed on this page.
   const updateStatus = async (orderId: string, newStatus: string) => {
     if (updatingOrderId) return;
     setUpdatingOrderId(orderId);

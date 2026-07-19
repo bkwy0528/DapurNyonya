@@ -73,7 +73,9 @@ All functions live in `functions/src/index.ts` (with core logic for the schedule
 
 **`closeExpiredProductionDates`** — **scheduled, daily at 01:00** (timezone `Asia/Kuala_Lumpur`). Finds `productionBatches` with `batchStatus == 'collecting'` and `productionDate <= today`; sets each to `batchStatus: 'cancelled'`, `status: 'closed'`, marks all its `'waiting'` pre-orders `'cancelled'`, and sends a best-effort push to each affected customer. Batches that reached `'confirmed'` are excluded — their fate is governed by the payment deadline, not the production date.
 
-**`onOrderStatusChange`** — Firestore trigger (`onDocumentUpdated` on `orders/{orderId}`). When an order's `status` changes to one of `'In Preparation'`, `'Out for Delivery'`, `'Ready for Pickup'`, `'Delivered'`, sends a push notification to the order's customer (admin status updates are direct Firestore writes from the client, so a trigger is the only server-side hook point). `'Order Received'` is deliberately not notified — the customer just caused it by paying.
+**`onOrderStatusChange`** — Firestore trigger (`onDocumentUpdated` on `orders/{orderId}`). Two independent things happen on a status change, in this order:
+1. **Ingredient stock deduction** (`functions/src/ingredientDeduction.ts`): if the transition goes from a still-needs-preparation status (`'Pending Approval'`, `'Order Received'`, `'In Preparation'`) into `'Ready for Pickup'` or `'Out for Delivery'` — i.e. prep for this order just finished — the order's items are resolved against the live `products` recipes and each matched ingredient's `ingredients/{id}.purchased` is decremented (clamped at 0, never negative) inside a transaction. Recipe rows without an `ingredientId` (not yet migrated to the master list) are skipped. This is what keeps "Purchased" an accurate running stock count without the admin manually resetting it after every order — see §5's Ingredient planning entry.
+2. **Push notification**: if the new `status` is one of `'In Preparation'`, `'Out for Delivery'`, `'Ready for Pickup'`, `'Delivered'`, sends a push to the order's customer (admin status updates are direct Firestore writes from the client, so a trigger is the only server-side hook point). `'Order Received'` is deliberately not notified — the customer just caused it by paying.
 
 **`sendTestNotificationToSelf`** — callable; admin-only (checked against the same `ADMIN_EMAILS` list duplicated from the rules). Sends a fixed test push to the caller's own stored FCM tokens so the admin can verify the pipeline end-to-end.
 
@@ -111,20 +113,19 @@ Role derivation happens in `App.tsx`'s `onAuthStateChanged` handler: an email in
 
 **Authentication & profiles.** Email/password registration (client-side password policy: ≥8 characters, letters and digits), Google sign-in (auto-profile creation), email-based password reset. Customers edit name, phone, address, notes, and a cropped/compressed profile photo in `users/{uid}`; the admin has an equivalent editor writing to `adminProfile/main`.
 
-**Product catalogue (admin).** Full CRUD in `ProductManagementPage`. A product carries `name`, `description`, `price`, `unit` (free text), `prepDays`, `available`, `image` (base64, cropped via `react-easy-crop` and compressed client-side to fit Firestore's 1 MiB document cap), and two flags: **`bulkExempt`** ("No Minimum Quantity" — the product neither counts toward the bulk minimum nor restricts the date) and **`batchTracked`** ("Batch Production (MOQ)" — the product leaves the normal cart flow entirely and is sold by pre-order). Each product optionally holds a recipe: `ingredients[]` rows referencing the shared master list (`ingredientId`, `name`, `quantity` per unit, `unit`, plus optional `batchAmount`/`batchYield` entry helpers from which per-unit quantity is derived). Typing a new ingredient name auto-creates a master ingredient; deleting a product warns if it still appears in upcoming orders. A duplicate-name warning requires a second save press.
+**Product catalogue (admin).** Full CRUD in `ProductManagementPage`. A product carries `name`, `description`, `price`, `unit` (free text), `prepDays`, `available`, `image` (base64, cropped via `react-easy-crop` and compressed client-side to fit Firestore's 1 MiB document cap), and a **`batchTracked`** flag ("Batch Production (MOQ)" — the product leaves the normal cart flow entirely and is sold by pre-order). Each product optionally holds a recipe: `ingredients[]` rows referencing the shared master list (`ingredientId`, `name`, `quantity` per unit, `unit`, plus optional `batchAmount`/`batchYield` entry helpers from which per-unit quantity is derived). Typing a new ingredient name auto-creates a master ingredient; deleting a product warns if it still appears in upcoming orders. A duplicate-name warning requires a second save press.
 
 **Customer ordering & cart.** Home page lists available products with an admin-controlled announcement banner; `batchTracked` products route to the pre-order page and are badged "Pre-Order", others to the quantity/notes order page ("Made to Order"). Cart supports quantity edits, swipe-to-delete, appended notes, and persists in `localStorage`. Guests can do all of this; checkout is gated behind login (with return-to-cart redirect state).
 
 **Checkout (`CheckoutPage`).** Enforced client-side at checkout (server-side enforcement of these date rules does **not** exist in `submitOrder`):
-- *Preparation lead time*: earliest selectable date = today + max `prepDays` across cart items (calendar dates before it are disabled).
-- *Bulk-minimum / collection-day rule*: carts whose counted units (excluding `bulkExempt` products) are below `orderingRules.bulkMinQuantity` (default 20) may only pick the configured `smallOrderWeekdays` (default `[6]`, Saturdays) — **stored in** `settings/business.orderingRules`, **enforced in** the checkout calendar's disabled-dates function and re-validated in `handlePlaceOrder`.
-- *Festive-season window*: dates between `orderingRules.seasonStart` and `seasonEnd` (inclusive, `YYYY-MM-DD`) are open to small orders too; a half-configured or inverted window is treated as off (`normalizeOrderingRules`).
+- *Preparation lead time*: earliest selectable date = today + max `prepDays` across cart items + the admin-configured `settings/business.orderLeadBufferDays` (default 0; extra whole days on top of prepDays, so there's guaranteed slack between payment and the start of prep — **configured on** the Pre-Orders page's "General Order Availability" section, via `normalizeOrderLeadBufferDays`). Calendar dates before the combined date are disabled.
+- *Open order windows*: general (non-batch-tracked) orders are only accepted on dates inside an admin-configured window — **stored in** `settings/business.openOrderRanges` (array of `{ start, end }`, `YYYY-MM-DD` inclusive), **configured on** the Pre-Orders page's "General Order Availability" section, **enforced in** the checkout calendar's disabled-dates function and re-validated in `handlePlaceOrder`. Closed by default (no ranges = no selectable dates) until the admin adds at least one window; malformed or inverted entries are dropped by `normalizeOpenOrderRanges`.
 - *Capacity*: the selected date's `orderCounts` count is compared to `dailyLimits` (per-date doc, falling back to the reserved `_default` doc) and shown as remaining slots; a full date blocks order placement. This client check is advisory — the authoritative re-check (log-only) happens in `submitOrder`'s transaction.
 - Delivery requires address + 5-digit postal code. **No delivery fee is calculated or collected**; the UI states the Grab fee is confirmed separately via WhatsApp. Payment method choice is `'tng'` (DuitNow QR / e-wallet) or `'fpx'` only. "Place Order" writes `pendingOrder` to `sessionStorage` and navigates to `/customer/payment` — nothing is written to the database.
 
 **Pre-order / batch module (customer side, `BatchProductPage`).** Shows open (`status === 'open'`, not cancelled, future-dated) production dates for the product with live aggregate progress bars (`currentQuantity / minQuantity`, count of customers joined, remaining capacity — never individual names, by design), quantity, delivery method, and contact form. Placing the pre-order calls `createBatchPreOrder`; no payment is collected. The tracking page ("My Orders") shows pre-order cards sorted action-first (`awaiting_payment`, `waiting`, `expired`, `cancelled`), with a payment-deadline banner and an inline "Pay Now" flow that writes a `{ kind: 'batchOrder' }` `pendingOrder` and reuses the same ToyyibPay pages; expired/cancelled cards disappear 7 days after their production date (client-side filtering only — documents are never deleted). A dismissible nudge prompts customers with pre-orders to enable push notifications.
 
-**Pre-order administration (`ProductionCalendarPage`).** Calendar of production dates (amber = has batches, green = has a confirmed batch). Per date and batch-tracked product the admin can open a date with `minQuantity`/`maxQuantity` (writing the `productionBatches` doc directly — permitted by rules), edit min/max, close/reopen the date (`status` toggle), expand the pre-order list, and cancel an individual not-yet-paid pre-order (`adminCancelBatchOrder` in `db.ts`: an atomic batched write setting the pre-order `'cancelled'` and decrementing the batch counters).
+**Pre-order administration (`ProductionCalendarPage`).** Also hosts "General Order Availability": a list of `openOrderRanges` windows (add via a range-mode calendar picker, remove individually) plus an "Extra advance-notice buffer" number input (`orderLeadBufferDays`) that both gate which dates regular checkout allows — see Checkout above. Below that, a calendar of batch production dates (amber = has batches, green = has a confirmed batch). Per date and batch-tracked product the admin can open a date with `minQuantity`/`maxQuantity` (writing the `productionBatches` doc directly — permitted by rules), edit min/max, close/reopen the date (`status` toggle), expand the pre-order list, and cancel an individual not-yet-paid pre-order (`adminCancelBatchOrder` in `db.ts`: an atomic batched write setting the pre-order `'cancelled'` and decrementing the batch counters).
 
 **Order tracking (customer).** Paid orders (including graduated batch orders — indistinguishable by design) show a status timeline adapted to fulfilment method (pickup: `Order Received → In Preparation → Ready for Pickup`; delivery: `Order Received → In Preparation → Out for Delivery → Delivered`), admin notes ("Message from seller"), and a link to a print-optimised receipt (`OrderReceiptPage`, ownership-checked, A4 print CSS with mobile-print font scaling).
 
@@ -132,11 +133,11 @@ Role derivation happens in `App.tsx`'s `onAuthStateChanged` handler: an email in
 
 **Production schedule (admin, `ProductionSchedulePage`).** Groups non-rejected/non-cancelled orders by `deliveryDate` on a calendar, shows load vs limit, urgency badges (Overdue/Today/Tomorrow/Urgent/Upcoming) and suggested production stages by days remaining, and manages `dailyLimits`: per-date caps plus the **default limit** stored under the reserved document ID `_default` in the same collection.
 
-**Ingredient planning (admin, `IngredientEstimationPage`).** **Required-vs-Purchased tracking exists in code.** Automatic mode tallies product quantities from orders with status in `['Pending Approval', 'Order Received', 'In Preparation']` and `deliveryDate >= today` (matched by `productId`, name as legacy fallback), multiplies by recipes, and aggregates by master `ingredientId` into rows showing Required, an editable Purchased amount (persisted to `ingredients/{id}.purchased`), and Remaining/Shortage, plus a printable Shopping List of shortages. A manual mode accepts typed product counts. Recipe rows predating the master list ("legacy" free-text rows) aggregate by name+unit, cannot track Purchased, and a one-time **"Migrate Ingredient Data"** button converts them (creates master ingredients, carries over old per-product `stock` values into `purchased`, rewrites recipes). Warnings surface deleted products and products without recipes.
+**Ingredient planning (admin, `IngredientEstimationPage`).** **Required-vs-Purchased tracking exists in code.** Automatic mode tallies product quantities from orders with status in `['Pending Approval', 'Order Received', 'In Preparation']` and `deliveryDate >= today` (matched by `productId`, name as legacy fallback), multiplies by recipes, and aggregates by master `ingredientId` into rows showing Required, an editable Purchased amount (persisted to `ingredients/{id}.purchased`), and Remaining/Shortage, plus a printable Shopping List of shortages. The Purchased input holds its own draft string while being typed (`purchasedDrafts`, committed on blur) rather than mirroring `ingredient.purchased` directly on every keystroke — a controlled `<input type="number">` bound straight to the numeric value would otherwise snap a cleared "0" back the instant it's deleted, since an empty string parses to 0 too. **Purchased is decremented automatically** server-side (`functions/src/ingredientDeduction.ts`, via the `onOrderStatusChange` trigger — see §3) the moment an order's status moves from "still needs preparation" into `'Ready for Pickup'`/`'Out for Delivery'`, so the admin no longer has to manually reset it after each order to avoid a stale count colliding with a new one. A manual mode accepts typed product counts. Recipe rows predating the master list ("legacy" free-text rows) aggregate by name+unit, cannot track Purchased (and are skipped by the auto-deduction), and a one-time **"Migrate Ingredient Data"** button converts them (creates master ingredients, carries over old per-product `stock` values into `purchased`, rewrites recipes). Warnings surface deleted products and products without recipes.
 
 **Analytics (admin).** `AdminDashboard` (headline cards, in-progress counts, recent orders) and `AnalyticsDashboard` (total revenue, 30-day revenue and growth vs prior 30 days, six-month revenue area chart, product sales bar chart and table, status pie chart) — all computed client-side from a full `orders` read. Revenue rule everywhere: orders with status `'Rejected'`, `'Cancelled'`, or `'Pending Approval'` are excluded.
 
-**Settings (admin, `AdminSettingsPage`).** The complete field set actually written to `settings/business` (a full-document `setDoc`, no merge): `businessName`, `businessDescription`, `contactPhone`, `contactEmail`, `operatingHours`, `announcementEnabled`, `announcementTitle`, `announcementText`, `orderingRules` (`{ bulkMinQuantity, smallOrderWeekdays, seasonStart, seasonEnd }`), `batchPaymentWindowHours`. The page also hosts the admin's push-notification enrolment and the "Send test notification to myself" button.
+**Settings (admin, `AdminSettingsPage`).** Writes to `settings/business` (`setDoc` with `merge: true`, since `ProductionCalendarPage` also writes its own field — `openOrderRanges` — to the same doc): `businessName`, `businessDescription`, `contactPhone`, `contactEmail`, `operatingHours`, `announcementEnabled`, `announcementTitle`, `announcementText`, `batchPaymentWindowHours`. The page also hosts the admin's push-notification enrolment and the "Send test notification to myself" button.
 
 ---
 
@@ -209,7 +210,7 @@ All collections are top-level (no subcollections). Access as enforced by `firest
 
 | Collection | Document ID | Contents | Read (rules) | Write (rules) |
 |---|---|---|---|---|
-| `products` | `Date.now().toString()` (seeds: `'1'`–`'3'`) | catalogue item incl. `bulkExempt`, `batchTracked`, `ingredients[]` recipe, base64 `image` | public | admin |
+| `products` | `Date.now().toString()` (seeds: `'1'`–`'3'`) | catalogue item incl. `batchTracked`, `ingredients[]` recipe, base64 `image` | public | admin |
 | `ingredients` | `` `${Date.now()}-${random}` `` | master ingredient: `id`, `name`, `unit`, `purchased` | public | admin |
 | `orders` | Firestore auto-ID | full order (fields in §9.1) | admin, or owner (`customerId == auth.uid`) | create: **nobody** (server-only via `submitOrder`/`submitBatchOrderPayment`); update/delete: admin |
 | `paymentConfirmations` | ToyyibPay `billCode` | `billCode`, `status`, `refno`, `amount` (cents), `orderId`, `reason`, `receivedAt` | **nobody** | **nobody** (written by `toyyibpayCallback`, read by the submit callables) |
@@ -327,7 +328,6 @@ interface Product {
   unit: string;
   prepDays: number;
   available: boolean;
-  bulkExempt?: boolean;
   batchTracked?: boolean;
   ingredients?: ProductIngredient[];
 }
@@ -335,15 +335,15 @@ interface Product {
 
 ### 9.4 Settings document
 
-There is no named interface for the settings document; the authoritative shape is the object passed to `saveSettings` in `AdminSettingsPage.tsx` (fields listed in §5), with the ordering rules subtree typed as:
+There is no named interface for the settings document; the authoritative shape is the union of the fields `AdminSettingsPage.tsx` and `ProductionCalendarPage.tsx` each save (both `merge: true`, fields listed in §5), with the open order ranges subtree typed as:
 
 ```ts
-export interface OrderingRules {
-  bulkMinQuantity: number;
-  smallOrderWeekdays: number[]; // JS getDay() values (0=Sun … 6=Sat)
-  seasonStart: string | null;   // YYYY-MM-DD inclusive; both null = off
-  seasonEnd: string | null;
+export interface OrderWindow {
+  start: string; // YYYY-MM-DD inclusive
+  end: string;   // YYYY-MM-DD inclusive
 }
+// settings/business.openOrderRanges: OrderWindow[]
+// settings/business.orderLeadBufferDays: number (default 0, via normalizeOrderLeadBufferDays)
 ```
 
 ---
@@ -395,11 +395,9 @@ There are **no field-diff (granular update-constraint) rules** in the current fi
 | Push notifications | **Fully implemented** | Batch confirmed / expired / cancelled, order-status changes (`onOrderStatusChange`), admin test send; foreground messages shown as toasts; requires per-device opt-in |
 | In-app notification centre / history | **Not implemented** | Notifications are push + transient toasts only; nothing is stored or listable in-app |
 | Email notifications | **Not implemented** | Only ToyyibPay's own bill email (`billContentEmail`) exists |
-| Required-vs-Purchased ingredient tracking | **Fully implemented** | Master `ingredients` collection with `purchased`; legacy free-text recipe rows need the one-time in-app migration before they can track Purchased |
-| Bulk minimum rule (default 20 units) | **Partially implemented — client-side only** | Stored in `settings/business.orderingRules`; enforced in the checkout calendar and validation; `submitOrder` does not re-check it server-side |
-| Saturday/collection-day rule for small orders | **Partially implemented — client-side only** | Same enforcement point and same server-side gap as above |
-| Festive-season windows | **Partially implemented — client-side only** | Same as above; half-configured windows treated as off |
-| `bulkExempt` product flag | **Fully implemented (within the client-side rule)** | Excluded from counted units; exempt-only carts unrestricted |
+| Required-vs-Purchased ingredient tracking | **Fully implemented** | Master `ingredients` collection with `purchased`, auto-decremented server-side on order fulfilment (`onOrderStatusChange` → `ingredientDeduction.ts`); legacy free-text recipe rows need the one-time in-app migration before they can track Purchased |
+| Open order date windows (general products) | **Partially implemented — client-side only** | Stored in `settings/business.openOrderRanges`; admin-configured on the Pre-Orders page; enforced in the checkout calendar and validation; `submitOrder` does not re-check it server-side; closed by default until a window is added |
+| Order lead-time buffer (general products) | **Partially implemented — client-side only** | `settings/business.orderLeadBufferDays` (default 0), admin-configured on the Pre-Orders page, added on top of per-product `prepDays` to compute checkout's earliest selectable date; `submitOrder` does not re-check it server-side |
 | Daily capacity limits | **Partially implemented** | Advisory client pre-check (public `orderCounts` + `dailyLimits`/`_default`); transactional server re-check exists but deliberately only **logs** an overbook — a paid order is never refused |
 | Batch orders vs daily capacity | **Not implemented (by design)** | Graduated batch orders bypass `dailyLimits`/`orderCounts` entirely |
 | Receipts | **Fully implemented** | Print-optimised A4 receipt page with ownership check |

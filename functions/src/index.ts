@@ -3,6 +3,7 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import { expireBatchPaymentsCore, closeExpiredProductionDatesCore } from './batchLifecycle';
 import { sendPushToUserCore, sendPushToUsersCore } from './pushNotifications';
+import { deductIngredientsForOrderCore, shouldDeductIngredients } from './ingredientDeduction';
 import { logger } from 'firebase-functions';
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
@@ -763,7 +764,19 @@ export const onOrderStatusChange = onDocumentUpdated(
   async (event) => {
     const before = event.data?.before.data() as any;
     const after = event.data?.after.data() as any;
-    if (!before || !after || before.status === after.status || !NOTIFIABLE_STATUSES.has(after.status)) {
+    if (!before || !after || before.status === after.status) {
+      return;
+    }
+
+    if (shouldDeductIngredients(before.status, after.status)) {
+      try {
+        await deductIngredientsForOrderCore(db, after.items || []);
+      } catch (err) {
+        logger.error('Failed to deduct ingredient stock for a fulfilled order', { orderId: event.params.orderId, err });
+      }
+    }
+
+    if (!NOTIFIABLE_STATUSES.has(after.status)) {
       return;
     }
     try {

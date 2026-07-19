@@ -49,6 +49,12 @@ export default function IngredientEstimationPage({ user: _user }: IngredientEsti
   const [deletedProductItems, setDeletedProductItems] = useState<{ name: string; count: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [migrating, setMigrating] = useState(false);
+  // Raw text the admin is currently typing into a Purchased box, keyed by
+  // ingredient id. Kept separate from `ingredients[].purchased` (a number) so
+  // that backspacing "0" to type a new value doesn't get instantly overwritten
+  // by a re-render setting the controlled input back to "0" — the draft only
+  // gets parsed into a committed number on blur.
+  const [purchasedDrafts, setPurchasedDrafts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!manualMode) calculateFromOrders();
@@ -160,16 +166,17 @@ export default function IngredientEstimationPage({ user: _user }: IngredientEsti
     setProductCounts(prev => prev.map(p => p.id === id ? { ...p, count: numValue } : p));
   };
 
-  const updatePurchased = async (id: string, value: string) => {
+  const commitPurchased = async (id: string, value: string) => {
     const numValue = Math.max(0, parseFloat(value) || 0);
     setIngredients(prev => prev.map(ing => ing.id === id ? { ...ing, purchased: numValue } : ing));
+    setPurchasedDrafts(prev => { const { [id]: _removed, ...rest } = prev; return rest; });
     const row = ingredients.find(ing => ing.id === id);
     if (row && !row.isLegacy) {
       await updateIngredientPurchased(id, numValue);
     }
   };
 
-  const resetPurchased = (id: string) => updatePurchased(id, '0');
+  const resetPurchased = (id: string) => commitPurchased(id, '0');
 
   // One-time cleanup for products whose recipes still use free-text ingredient
   // names instead of referencing the shared ingredient master list. Creates one
@@ -383,7 +390,15 @@ export default function IngredientEstimationPage({ user: _user }: IngredientEsti
                           <p className="text-sm text-gray-400 italic">Migrate first</p>
                         ) : (
                           <div className="flex items-center gap-1">
-                            <Input type="number" value={ingredient.purchased} onChange={(e) => updatePurchased(ingredient.id, e.target.value)} className="w-20 h-9 text-right" min="0" step="0.1" />
+                            <Input
+                              type="number"
+                              value={purchasedDrafts[ingredient.id] ?? String(ingredient.purchased)}
+                              onChange={(e) => setPurchasedDrafts(prev => ({ ...prev, [ingredient.id]: e.target.value }))}
+                              onBlur={(e) => commitPurchased(ingredient.id, e.target.value)}
+                              className="w-20 h-9 text-right"
+                              min="0"
+                              step="0.1"
+                            />
                             <span className="text-gray-600 text-sm">{ingredient.unit}</span>
                           </div>
                         )}
