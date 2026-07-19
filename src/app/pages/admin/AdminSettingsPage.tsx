@@ -211,7 +211,7 @@ export default function AdminSettingsPage({ user }: AdminSettingsPageProps) {
             </div>
             <p className="text-sm text-gray-600">
               To control which dates customers can order regular (non-batch) products for, see "General Order
-              Availability" on the Pre-Orders page.
+              Availability" on the Schedule page.
             </p>
           </CardContent>
         </Card>

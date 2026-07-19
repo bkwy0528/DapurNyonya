@@ -6,9 +6,6 @@ import {
   getMaxPrepDaysFromCart,
   normalizeOpenOrderRanges,
   isDateOrderable,
-  normalizeOrderLeadBufferDays,
-  getLimitForDate,
-  DEFAULT_DAILY_LIMIT_KEY,
 } from '../../src/app/utils/business';
 
 describe('validatePassword', () => {
@@ -125,44 +122,5 @@ describe('isDateOrderable', () => {
 
   it('is always false when no ranges are configured (closed by default)', () => {
     expect(isDateOrderable('2026-06-10', [])).toBe(false);
-  });
-});
-
-describe('normalizeOrderLeadBufferDays', () => {
-  it('defaults to 0 (no extra buffer) when unset', () => {
-    expect(normalizeOrderLeadBufferDays(undefined)).toBe(0);
-    expect(normalizeOrderLeadBufferDays(null)).toBe(0);
-  });
-
-  it('keeps a valid whole-day buffer', () => {
-    expect(normalizeOrderLeadBufferDays(2)).toBe(2);
-  });
-
-  it('floors a fractional value', () => {
-    expect(normalizeOrderLeadBufferDays(2.9)).toBe(2);
-  });
-
-  it('rejects a negative buffer, falling back to 0', () => {
-    expect(normalizeOrderLeadBufferDays(-1)).toBe(0);
-  });
-
-  it('rejects non-numeric input, falling back to 0', () => {
-    expect(normalizeOrderLeadBufferDays('not a number')).toBe(0);
-  });
-});
-
-describe('getLimitForDate', () => {
-  it('returns 0 (unlimited) when nothing is set', () => {
-    expect(getLimitForDate({}, '2026-07-18')).toBe(0);
-  });
-
-  it('returns the per-date limit when set', () => {
-    expect(getLimitForDate({ '2026-07-18': 8 }, '2026-07-18')).toBe(8);
-  });
-
-  it('falls back to the default limit for dates without their own', () => {
-    const limits = { [DEFAULT_DAILY_LIMIT_KEY]: 12, '2026-07-18': 8 };
-    expect(getLimitForDate(limits, '2026-07-18')).toBe(8);
-    expect(getLimitForDate(limits, '2026-07-19')).toBe(12);
   });
 });

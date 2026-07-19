@@ -9,11 +9,11 @@ import { Textarea } from '../../components/ui/textarea';
 import { ArrowLeft, MapPin, Truck, Home as HomeIcon, Calendar, Smartphone, Building2, CheckCircle2 } from 'lucide-react';
 import { Calendar as CalendarPicker } from '../../components/ui/calendar';
 import { useCart } from '../../context/CartContext';
-import { OrderWindow, getLimitForDate, getMaxPrepDaysFromCart, isDateOrderable, normalizeOpenOrderRanges, normalizeOrderLeadBufferDays, toLocalYMD } from '../../utils/business';
+import { OrderWindow, getMaxPrepDaysFromCart, isDateOrderable, normalizeOpenOrderRanges, toLocalYMD } from '../../utils/business';
 import { User } from '../../App';
 import PageContainer from '../../components/ui/PageContainer';
 import FormSection from '../../components/ui/FormSection';
-import { getDailyLimits, getOrderCountForDate, getSettings } from '../../utils/db';
+import { getSettings } from '../../utils/db';
 
 // Cash was removed on the admin's request — every order is paid online before
 // it exists, which is also what lets orders skip the old approval step.
@@ -37,46 +37,32 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
   const [deliveryDate, setDeliveryDate] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'tng' | 'fpx' | ''>('');
   const [paymentNote, setPaymentNote] = useState('');
-  const [dateCapacity, setDateCapacity] = useState<{ count: number; limit: number } | null>(null);
   const [formErrors, setFormErrors] = useState<string[]>([]);
   const errorBoxRef = useRef<HTMLDivElement>(null);
 
   const [minPrepDays] = useState(() => Math.max(1, getMaxPrepDaysFromCart(cartItems)));
 
   // Orders are only accepted on admin-opened date windows (configured on the
-  // Pre-Orders page) — closed by default until at least one is added.
+  // Schedule page) — closed by default until at least one is added.
   const [openOrderRanges, setOpenOrderRanges] = useState<OrderWindow[]>([]);
-  // Extra whole days the admin adds on top of each item's own prep time (see
-  // "Extra advance-notice buffer" on the Pre-Orders page) — guarantees a gap
-  // between payment and the start of prep beyond just the item's own prepDays.
-  const [orderLeadBufferDays, setOrderLeadBufferDays] = useState(0);
 
   useEffect(() => {
     getSettings()
       .then(s => {
         setOpenOrderRanges(normalizeOpenOrderRanges(s?.openOrderRanges));
-        setOrderLeadBufferDays(normalizeOrderLeadBufferDays(s?.orderLeadBufferDays));
       })
       .catch(() => { /* defaults already applied */ });
   }, []);
 
-  const effectiveLeadDays = minPrepDays + orderLeadBufferDays;
   const minDate = useMemo(() => {
     const min = new Date();
-    min.setDate(min.getDate() + effectiveLeadDays);
+    min.setDate(min.getDate() + minPrepDays);
     return toLocalYMD(min);
-  }, [effectiveLeadDays]);
+  }, [minPrepDays]);
 
   useEffect(() => {
     if (cartItems.length === 0) navigate('/customer/cart');
   }, [cartItems.length, navigate]);
-
-  useEffect(() => {
-    if (!deliveryDate) { setDateCapacity(null); return; }
-    Promise.all([getOrderCountForDate(deliveryDate), getDailyLimits()])
-      .then(([count, limits]) => { setDateCapacity({ count, limit: getLimitForDate(limits, deliveryDate) }); })
-      .catch(() => { /* capacity display unavailable on read failure */ });
-  }, [deliveryDate]);
 
   // Delivery fees are no longer calculated or collected here — the admin
   // arranges a Grab delivery and confirms the exact fee with the customer over
@@ -98,7 +84,7 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
       errors.push('Please select a pickup/delivery date');
     } else if (deliveryDate < minDate) {
       // The calendar disables these, but guard against a stale selection
-      errors.push(`The earliest available date is ${new Date(`${minDate}T00:00:00`).toLocaleDateString('en-MY', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} — orders need at least ${effectiveLeadDays} day${effectiveLeadDays !== 1 ? 's' : ''} advance notice`);
+      errors.push(`The earliest available date is ${new Date(`${minDate}T00:00:00`).toLocaleDateString('en-MY', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} — orders need at least ${minPrepDays} day${minPrepDays !== 1 ? 's' : ''} advance notice`);
     } else if (!isDateOrderable(deliveryDate, openOrderRanges)) {
       errors.push('The selected date is not currently open for ordering — please pick a highlighted date on the calendar');
     }
@@ -111,19 +97,6 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
     if (errors.length > 0) {
       showErrors(errors);
       return;
-    }
-
-    // Re-check capacity right before proceeding (counts come from the public
-    // orderCounts collection, so this works for customers too)
-    try {
-      const [count, limits] = await Promise.all([getOrderCountForDate(deliveryDate), getDailyLimits()]);
-      const limit = getLimitForDate(limits, deliveryDate);
-      if (limit > 0 && count >= limit) {
-        showErrors(['The selected date is fully booked. Please choose another date.']);
-        return;
-      }
-    } catch {
-      // Network hiccup — don't block the order over a failed capacity read
     }
 
     setFormErrors([]);
@@ -211,12 +184,7 @@ export default function CheckoutPage({ user }: CheckoutPageProps) {
                   Selected: {new Date(`${deliveryDate}T00:00:00`).toLocaleDateString('en-MY', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                 </p>
               )}
-              <p className="text-base text-gray-700">Orders require at least {effectiveLeadDays} day{effectiveLeadDays !== 1 ? 's' : ''} advance notice</p>
-              {dateCapacity && dateCapacity.limit > 0 && (
-                dateCapacity.count >= dateCapacity.limit
-                  ? <p className="text-sm text-red-600">Selected date is fully booked. Please choose another date.</p>
-                  : <p className="text-sm text-green-700">Available slots: {Math.max(0, dateCapacity.limit - dateCapacity.count)} of {dateCapacity.limit} remaining</p>
-              )}
+              <p className="text-base text-gray-700">Orders require at least {minPrepDays} day{minPrepDays !== 1 ? 's' : ''} advance notice</p>
             </FormSection>
           </CardContent>
         </Card>

@@ -62,27 +62,3 @@ export function normalizeOpenOrderRanges(raw: any): OrderWindow[] {
 export function isDateOrderable(dateKey: string, ranges: OrderWindow[]) {
   return ranges.some(r => dateKey >= r.start && dateKey <= r.end);
 }
-
-// Extra whole days added on top of a product's own prepDays before a delivery
-// date becomes selectable — e.g. a buffer of 1 guarantees at least one full
-// day between the customer paying and prep starting, on top of however long
-// the item itself takes to prepare. 0 means "no extra buffer" (default).
-export function normalizeOrderLeadBufferDays(raw: any): number {
-  const n = Number(raw);
-  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
-}
-
-// ─── Daily capacity limits ───────────────────────────────────────────────────
-//
-// Per-date limits live in the `dailyLimits` collection keyed by YYYY-MM-DD.
-// A doc under this reserved key holds the default limit applied to every date
-// without its own doc, so the admin can cap all days in one action. It rides
-// along in the same getDailyLimits() fetch and is covered by the same
-// Firestore rules as the per-date docs.
-
-export const DEFAULT_DAILY_LIMIT_KEY = '_default';
-
-// 0 means unlimited (no cap set for that date).
-export function getLimitForDate(limits: Record<string, number>, dateKey: string): number {
-  return limits[dateKey] ?? limits[DEFAULT_DAILY_LIMIT_KEY] ?? 0;
-}

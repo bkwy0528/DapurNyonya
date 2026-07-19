@@ -99,11 +99,6 @@ export async function updateOrderFields(id: string, updates: Record<string, any>
   await updateDoc(doc(db, 'orders', id), updates);
 }
 
-export async function getOrderCountForDate(date: string): Promise<number> {
-  const snap = await getDoc(doc(db, 'orderCounts', date));
-  return snap.exists() ? Math.max(0, (snap.data() as any).count || 0) : 0;
-}
-
 // ─── Settings ────────────────────────────────────────────────────────────────
 
 export async function getSettings(): Promise<any> {
@@ -121,7 +116,7 @@ export async function saveSettings(settings: any): Promise<void> {
 // ─── Production Batches (batch/MOQ ordering) ────────────────────────────────
 //
 // Admin config (status/minQuantity/maxQuantity) is written directly from the
-// Production Calendar page, same as dailyLimits. currentQuantity/orderCount/
+// Production Calendar page. currentQuantity/orderCount/
 // batchStatus/confirmedAt/paymentDeadline are only ever written by the
 // createBatchPreOrder/expireBatchPayments/closeExpiredProductionDates Cloud
 // Functions (Admin SDK) — never by this client-side writer.
@@ -186,23 +181,6 @@ export async function adminCancelBatchOrder(batchOrder: any): Promise<void> {
 export async function getBatchOrderById(id: string): Promise<any | null> {
   const snap = await getDoc(doc(db, 'batchOrders', id));
   return snap.exists() ? snap.data() : null;
-}
-
-// ─── Daily Limits ────────────────────────────────────────────────────────────
-
-export async function getDailyLimits(): Promise<Record<string, number>> {
-  const snap = await getDocs(collection(db, 'dailyLimits'));
-  const result: Record<string, number> = {};
-  snap.docs.forEach(d => { result[d.id] = (d.data() as any).limit; });
-  return result;
-}
-
-export async function saveDailyLimit(dateKey: string, limit: number): Promise<void> {
-  await setDoc(doc(db, 'dailyLimits', dateKey), { limit });
-}
-
-export async function clearDailyLimit(dateKey: string): Promise<void> {
-  await deleteDoc(doc(db, 'dailyLimits', dateKey));
 }
 
 // ─── User Profiles ───────────────────────────────────────────────────────────

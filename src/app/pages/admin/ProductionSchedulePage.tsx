@@ -1,15 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
-import { Input } from '../../components/ui/input';
 import { Button } from '../../components/ui/button';
-import { Calendar as CalendarIcon, ArrowLeft, Clock, ChefHat, Package, AlertCircle } from 'lucide-react';
+import { Calendar as CalendarIcon, ArrowLeft, Clock, ChefHat, Package, AlertCircle, ChevronDown, ChevronUp, X } from 'lucide-react';
 import { User } from '../../App';
 import { getStatusStyle } from '../../utils/statusStyles';
 import { Calendar } from '../../components/ui/calendar';
-import { getOrders, getDailyLimits, saveDailyLimit, clearDailyLimit } from '../../utils/db';
-import { DEFAULT_DAILY_LIMIT_KEY, getLimitForDate } from '../../utils/business';
+import type { DateRange } from 'react-day-picker';
+import { getOrders, getSettings, saveSettings } from '../../utils/db';
+import { OrderWindow, normalizeOpenOrderRanges, toLocalYMD } from '../../utils/business';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
 interface ProductionSchedulePageProps {
@@ -23,14 +23,10 @@ interface GroupedOrders {
 export default function ProductionSchedulePage({ user: _user }: ProductionSchedulePageProps) {
   const [groupedOrders, setGroupedOrders] = useState<GroupedOrders>({});
   const [loading, setLoading] = useState(true);
-  const [dailyLimits, setDailyLimits] = useState<Record<string, number>>({});
-  const [selectedDate, setSelectedDate] = useState<Date>(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return today;
-  });
-  const [tempLimit, setTempLimit] = useState('');
-  const [tempDefaultLimit, setTempDefaultLimit] = useState('');
+  const [openOrderRanges, setOpenOrderRanges] = useState<OrderWindow[]>([]);
+  const [rangeDraft, setRangeDraft] = useState<DateRange | undefined>(undefined);
+  const [savingRange, setSavingRange] = useState(false);
+  const [expandedDay, setExpandedDay] = useState<string | null>(null);
 
   const toDateKey = (date: Date) => {
     const year = date.getFullYear();
@@ -41,7 +37,8 @@ export default function ProductionSchedulePage({ user: _user }: ProductionSchedu
 
   const fromDateKey = (dateKey: string) => new Date(`${dateKey}T00:00:00`);
   const getOrderLabel = (order: any) => order.finalizedNumber || `Order #${order.id.slice(-6)}`;
-  const getOrderCountForDate = (dateKey: string) => (groupedOrders[dateKey] || []).length;
+  const formatRangeDate = (ymd: string) =>
+    fromDateKey(ymd).toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' });
 
   const getDaysUntil = (dateKey: string) => {
     const deliveryDate = fromDateKey(dateKey);
@@ -76,7 +73,7 @@ export default function ProductionSchedulePage({ user: _user }: ProductionSchedu
   };
 
   const loadDataInner = async () => {
-    const [orders, limits] = await Promise.all([getOrders(), getDailyLimits()]);
+    const [orders, settings] = await Promise.all([getOrders(), getSettings()]);
     const grouped: GroupedOrders = {};
     orders
       .filter((order: any) => order.status !== 'Rejected' && order.status !== 'Cancelled' && order.deliveryDate)
@@ -85,80 +82,55 @@ export default function ProductionSchedulePage({ user: _user }: ProductionSchedu
         grouped[order.deliveryDate].push(order);
       });
     setGroupedOrders(grouped);
-    setDailyLimits(limits);
+    setOpenOrderRanges(normalizeOpenOrderRanges(settings?.openOrderRanges));
   };
 
   useEffect(() => { loadData(); }, []);
 
-  const handleSaveLimit = async (dateKey: string) => {
-    const parsed = parseInt(tempLimit || '0', 10);
-    if (parsed > 0) {
-      await saveDailyLimit(dateKey, parsed);
-      setDailyLimits(prev => ({ ...prev, [dateKey]: parsed }));
-    } else {
-      await clearDailyLimit(dateKey);
-      setDailyLimits(prev => {
-        const updated = { ...prev };
-        delete updated[dateKey];
-        return updated;
-      });
+  const handleAddRange = async () => {
+    if (!rangeDraft?.from || !rangeDraft?.to) return;
+    const updated = [...openOrderRanges, { start: toLocalYMD(rangeDraft.from), end: toLocalYMD(rangeDraft.to) }]
+      .sort((a, b) => a.start.localeCompare(b.start));
+    setSavingRange(true);
+    try {
+      await saveSettings({ openOrderRanges: updated });
+      setOpenOrderRanges(updated);
+      // Keep the range selected (rather than clearing it) so the orders
+      // panel below immediately shows what falls inside the window just opened.
+    } finally {
+      setSavingRange(false);
     }
-    setTempLimit('');
   };
 
-  const handleClearLimit = async (dateKey: string) => {
-    await clearDailyLimit(dateKey);
-    setDailyLimits(prev => {
-      const updated = { ...prev };
-      delete updated[dateKey];
-      return updated;
-    });
-    setTempLimit('');
-  };
-
-  // The default limit is stored as a reserved doc in the same collection, so
-  // the per-date save/clear helpers work for it unchanged.
-  const handleSaveDefaultLimit = async () => {
-    const parsed = parseInt(tempDefaultLimit || '0', 10);
-    if (parsed > 0) {
-      await saveDailyLimit(DEFAULT_DAILY_LIMIT_KEY, parsed);
-      setDailyLimits(prev => ({ ...prev, [DEFAULT_DAILY_LIMIT_KEY]: parsed }));
-    } else {
-      await handleClearDefaultLimit();
-      return;
+  const handleRemoveRange = async (index: number) => {
+    const updated = openOrderRanges.filter((_, i) => i !== index);
+    setSavingRange(true);
+    try {
+      await saveSettings({ openOrderRanges: updated });
+      setOpenOrderRanges(updated);
+    } finally {
+      setSavingRange(false);
     }
-    setTempDefaultLimit('');
   };
 
-  const handleClearDefaultLimit = async () => {
-    await clearDailyLimit(DEFAULT_DAILY_LIMIT_KEY);
-    setDailyLimits(prev => {
-      const updated = { ...prev };
-      delete updated[DEFAULT_DAILY_LIMIT_KEY];
-      return updated;
-    });
-    setTempDefaultLimit('');
+  const hasOrdersDates = useMemo(() => Object.keys(groupedOrders).map(fromDateKey), [groupedOrders]);
+
+  // Orders whose delivery date falls inside the currently selected range,
+  // grouped by day and sorted chronologically — each day renders as its own
+  // dropdown below so a busy range doesn't dump every order into one list.
+  const ordersByDayInRange = useMemo(() => {
+    if (!rangeDraft?.from || !rangeDraft?.to) return [] as { dateKey: string; orders: any[] }[];
+    const startKey = toLocalYMD(rangeDraft.from);
+    const endKey = toLocalYMD(rangeDraft.to);
+    return Object.keys(groupedOrders)
+      .filter((dateKey) => dateKey >= startKey && dateKey <= endKey)
+      .sort()
+      .map((dateKey) => ({ dateKey, orders: groupedOrders[dateKey] }));
+  }, [groupedOrders, rangeDraft]);
+
+  const toggleExpandedDay = (dateKey: string) => {
+    setExpandedDay((prev) => (prev === dateKey ? null : dateKey));
   };
-
-  const selectedDateKey = toDateKey(selectedDate);
-  const selectedOrders = groupedOrders[selectedDateKey] || [];
-  const selectedOrdersCount = getOrderCountForDate(selectedDateKey);
-  const defaultLimit = dailyLimits[DEFAULT_DAILY_LIMIT_KEY] ?? 0;
-  const selectedHasOverride = selectedDateKey in dailyLimits;
-  const selectedLimit = getLimitForDate(dailyLimits, selectedDateKey);
-  const selectedDaysUntil = getDaysUntil(selectedDateKey);
-  const selectedPriority = getPriorityBadge(selectedDaysUntil);
-  const selectedStages = getProductionStages(selectedDaysUntil);
-
-  const hasOrdersDates = Object.keys(groupedOrders).map(fromDateKey);
-  // Only dates that have orders can be at capacity, so iterating the order
-  // dates also covers dates capped by the default limit.
-  const fullCapacityDates = Object.keys(groupedOrders)
-    .filter(dateKey => {
-      const limit = getLimitForDate(dailyLimits, dateKey);
-      return limit > 0 && getOrderCountForDate(dateKey) >= limit;
-    })
-    .map(fromDateKey);
 
   if (loading) {
     return <LoadingSpinner />;
@@ -179,167 +151,151 @@ export default function ProductionSchedulePage({ user: _user }: ProductionSchedu
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-6">
         <Card className="overflow-hidden border-0 shadow-lg bg-white/95">
           <CardHeader className="brand-subtle-header">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <CardTitle className="text-2xl">Monthly Production Calendar</CardTitle>
-                <p className="text-sm text-gray-600 mt-1">Review capacity, plan production, and see busy dates at a glance.</p>
-              </div>
-              <div className="flex flex-wrap gap-2 text-xs text-gray-600">
-                <span className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1"><span className="h-2 w-2 rounded-full bg-gray-300" />No orders</span>
-                <span className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-amber-800"><span className="h-2 w-2 rounded-full bg-amber-500" />Orders present</span>
-                <span className="inline-flex items-center gap-2 rounded-full bg-red-100 px-3 py-1 text-red-800"><span className="h-2 w-2 rounded-full bg-red-500" />At capacity</span>
-              </div>
-            </div>
+            <CardTitle className="text-2xl">General Order Availability</CardTitle>
+            <p className="text-sm text-gray-600 mt-1">
+              Choose which dates customers can pick at checkout for regular (non-batch) products, e.g. a festive
+              season window. Batch-tracked products are unaffected — they use the Production Calendar tab on the
+              Pre-Orders page instead. Selecting a range below also shows the orders placed within it further down
+              this page.
+            </p>
           </CardHeader>
-
-          <CardContent className="grid gap-6 lg:grid-cols-[1.12fr_0.88fr] p-6">
-            <div className="lg:col-span-2 rounded-xl border bg-white p-4 shadow-sm">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">Default daily capacity — applies to every day</p>
-                  <p className="text-sm text-gray-500">
-                    {defaultLimit > 0
-                      ? `Currently ${defaultLimit} orders per day. Dates with their own limit below keep it.`
-                      : 'No default set — days without their own limit are unlimited.'}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <Input
-                    value={tempDefaultLimit}
-                    onChange={(e) => setTempDefaultLimit(e.target.value.replace(/\D/g, ''))}
-                    placeholder="Max orders / day"
-                    className="h-11 w-36"
-                  />
-                  <Button onClick={handleSaveDefaultLimit} className="brand-button">Save</Button>
-                  <Button variant="outline" onClick={handleClearDefaultLimit}>Clear</Button>
-                </div>
+          <CardContent className="space-y-4 p-6">
+            {openOrderRanges.length === 0 && (
+              <div className="alert-box">
+                <p className="text-sm text-red-800">
+                  No dates are open yet — customers cannot check out with regular products until you add available dates below.
+                </p>
               </div>
-            </div>
-
-            <div className="rounded-xl border bg-white p-3 shadow-sm">
-              <Calendar
-                mode="single"
-                selected={selectedDate}
-                onSelect={(date) => date && setSelectedDate(date)}
-                className="w-full"
-                modifiers={{ hasOrders: hasOrdersDates, fullCapacity: fullCapacityDates }}
-                modifiersClassNames={{
-                  hasOrders: 'bg-amber-100 text-amber-900 font-semibold',
-                  fullCapacity: 'bg-red-100 text-red-900 font-semibold',
-                }}
-              />
-            </div>
-
-            <div className="space-y-4">
-              <Card className="border-orange-200 bg-gradient-to-br from-orange-50 to-amber-50">
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <CardTitle className="text-xl">{selectedDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</CardTitle>
-                      <p className="text-sm text-gray-600 mt-1">
-                        {selectedDaysUntil < 0 ? 'Past date' : selectedDaysUntil === 0 ? 'Today' : `${selectedDaysUntil} days from now`}
-                      </p>
-                    </div>
-                    <Badge className={selectedPriority.className}>{selectedPriority.label}</Badge>
+            )}
+            {openOrderRanges.length > 0 && (
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                {openOrderRanges.map((range, index) => (
+                  <div key={`${range.start}_${range.end}`} className="flex items-center justify-between gap-3 rounded-lg border bg-white p-3">
+                    <button
+                      type="button"
+                      onClick={() => setRangeDraft({ from: fromDateKey(range.start), to: fromDateKey(range.end) })}
+                      className="flex-1 text-left text-sm font-medium text-gray-900 hover:text-orange-600"
+                    >
+                      {formatRangeDate(range.start)} – {formatRangeDate(range.end)}
+                    </button>
+                    <Button size="sm" variant="ghost" onClick={() => handleRemoveRange(index)} disabled={savingRange} className="h-8 px-2 text-red-600 hover:text-red-700 hover:bg-red-50">
+                      <X className="w-4 h-4" />
+                    </Button>
                   </div>
-                </CardHeader>
+                ))}
+              </div>
+            )}
+            <div className="space-y-3 rounded-lg border bg-gray-50 p-4">
+              <p className="text-sm font-medium text-gray-900">Add available dates</p>
+              <div className="flex justify-center rounded-lg border border-gray-200 bg-white">
+                <Calendar
+                  mode="range"
+                  selected={rangeDraft}
+                  onSelect={setRangeDraft}
+                  modifiers={{ hasOrders: hasOrdersDates }}
+                  modifiersClassNames={{ hasOrders: 'bg-amber-100 text-amber-900 font-semibold' }}
+                />
+              </div>
+              <Button size="sm" onClick={handleAddRange} disabled={savingRange || !rangeDraft?.from || !rangeDraft?.to} className="brand-button">
+                Add available dates
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-lg border bg-white p-3">
-                      <p className="text-xs uppercase tracking-wide text-gray-500">Orders</p>
-                      <p className="text-2xl font-bold text-gray-900">{selectedOrdersCount}</p>
-                    </div>
-                    <div className={`rounded-lg border p-3 ${selectedLimit > 0 && selectedOrdersCount >= selectedLimit ? 'border-red-200 bg-red-50' : 'bg-white'}`}>
-                      <p className="text-xs uppercase tracking-wide text-gray-500">Capacity</p>
-                      <p className="text-2xl font-bold text-gray-900">{selectedLimit > 0 ? `${Math.max(0, selectedLimit - selectedOrdersCount)} left` : 'Unlimited'}</p>
-                      {selectedLimit > 0 && (
-                        <p className="text-xs text-gray-500">{selectedHasOverride ? `Limit ${selectedLimit} for this date` : `Default limit ${selectedLimit}`}</p>
+        <Card className="overflow-hidden border-0 shadow-lg bg-white/95">
+          <CardHeader className="brand-subtle-header">
+            <CardTitle className="text-2xl">Orders</CardTitle>
+            <p className="text-sm text-gray-600 mt-1">
+              Select a date range on the calendar above (or click a saved window) to see the orders placed for those dates, one dropdown per day.
+            </p>
+          </CardHeader>
+          <CardContent className="p-6">
+            {!rangeDraft?.from || !rangeDraft?.to ? (
+              <p className="text-sm text-gray-600">No date range selected yet.</p>
+            ) : ordersByDayInRange.length === 0 ? (
+              <p className="text-sm text-gray-600">No orders scheduled between {formatRangeDate(toLocalYMD(rangeDraft.from))} and {formatRangeDate(toLocalYMD(rangeDraft.to))}.</p>
+            ) : (
+              <div className="space-y-3">
+                {ordersByDayInRange.map(({ dateKey, orders }) => {
+                  const daysUntil = getDaysUntil(dateKey);
+                  const priority = getPriorityBadge(daysUntil);
+                  const stages = getProductionStages(daysUntil);
+                  const isExpanded = expandedDay === dateKey;
+                  return (
+                    <div key={dateKey} className="rounded-lg border bg-white overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => toggleExpandedDay(dateKey)}
+                        className="w-full flex items-center justify-between gap-3 p-4 text-left hover:bg-gray-50"
+                      >
+                        <div>
+                          <p className="font-semibold text-gray-900">
+                            {fromDateKey(dateKey).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                          </p>
+                          <p className="text-sm text-gray-500">{orders.length} order{orders.length !== 1 ? 's' : ''}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge className={priority.className}>{priority.label}</Badge>
+                          {isExpanded ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
+                        </div>
+                      </button>
+
+                      {isExpanded && (
+                        <div className="space-y-3 border-t bg-gray-50/50 p-4">
+                          {stages.length > 0 && (
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                              {stages.map((stage, index) => {
+                                const Icon = stage.icon;
+                                return (
+                                  <div key={index} className={`${stage.bgColor} border border-gray-200 rounded-lg p-3`}>
+                                    <div className="flex items-center space-x-3">
+                                      <Icon className={`w-5 h-5 ${stage.color}`} />
+                                      <p className={`font-semibold text-sm ${stage.color}`}>{stage.label}</p>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                          {orders.map((order) => (
+                            <div key={order.id} className="rounded-lg border border-gray-200 bg-white p-3">
+                              <div className="flex items-start justify-between gap-3 mb-2">
+                                <div>
+                                  <p className="font-semibold text-gray-900">{getOrderLabel(order)}</p>
+                                  <p className="text-sm text-gray-600">{order.customerName}</p>
+                                </div>
+                                <Badge className={getStatusStyle(order.status)}>
+                                  {order.status}
+                                </Badge>
+                              </div>
+                              <div className="space-y-2">
+                                {order.items && order.items.map((item: any, index: number) => (
+                                  <div key={index} className="flex items-center justify-between rounded bg-gray-50 p-2 text-sm">
+                                    <span className="text-gray-700">{item.name} x {item.quantity}</span>
+                                    <span className="font-semibold text-orange-600">RM {(item.price * item.quantity).toFixed(2)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="mt-3 flex items-center justify-between text-sm text-gray-600">
+                                <div className="flex items-center gap-2">
+                                  <Clock className="w-4 h-4" />
+                                  <span>{order.deliveryMethod === 'delivery' ? 'Delivery' : 'Pickup'}</span>
+                                </div>
+                                <span className="font-semibold text-gray-900">Total: RM {(order.total || 0).toFixed(2)}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
-                  </div>
-
-                  <div className="space-y-2 rounded-lg border bg-white p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">Set daily capacity</p>
-                        <p className="text-sm text-gray-500">
-                          Limit how many orders can be accepted on this date.
-                          {defaultLimit > 0 && ` Clear reverts this date to the default (${defaultLimit}).`}
-                        </p>
-                      </div>
-                      <Badge variant="outline">{selectedDateKey}</Badge>
-                    </div>
-                    <div className="flex gap-2">
-                      <Input value={tempLimit} onChange={(e) => setTempLimit(e.target.value.replace(/\D/g, ''))} placeholder="Max orders" className="h-11" />
-                      <Button onClick={() => handleSaveLimit(selectedDateKey)} className="brand-button">Save</Button>
-                      <Button variant="outline" onClick={() => handleClearLimit(selectedDateKey)}>Clear</Button>
-                    </div>
-                  </div>
-
-                  {selectedStages.length > 0 && (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      {selectedStages.map((stage, index) => {
-                        const Icon = stage.icon;
-                        return (
-                          <div key={index} className={`${stage.bgColor} border border-gray-200 rounded-lg p-4`}>
-                            <div className="flex items-center space-x-3">
-                              <Icon className={`w-5 h-5 ${stage.color}`} />
-                              <p className={`font-semibold ${stage.color}`}>{stage.label}</p>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  <div className="rounded-lg border bg-white p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="font-semibold text-gray-900">Orders for selected date</h4>
-                      <Badge className={selectedPriority.className}>{selectedOrders.length} order{selectedOrders.length !== 1 ? 's' : ''}</Badge>
-                    </div>
-
-                    {selectedOrders.length === 0 ? (
-                      <p className="text-sm text-gray-600">No orders scheduled for this date.</p>
-                    ) : (
-                      <div className="space-y-3 max-h-[34rem] overflow-y-auto pr-1">
-                        {selectedOrders.map((order) => (
-                          <div key={order.id} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                            <div className="flex items-start justify-between gap-3 mb-2">
-                              <div>
-                                <p className="font-semibold text-gray-900">{getOrderLabel(order)}</p>
-                                <p className="text-sm text-gray-600">{order.customerName}</p>
-                              </div>
-                              <Badge className={getStatusStyle(order.status)}>
-                                {order.status}
-                              </Badge>
-                            </div>
-                            <div className="space-y-2">
-                              {order.items && order.items.map((item: any, index: number) => (
-                                <div key={index} className="flex items-center justify-between rounded bg-white p-2 text-sm">
-                                  <span className="text-gray-700">{item.name} x {item.quantity}</span>
-                                  <span className="font-semibold text-orange-600">RM {(item.price * item.quantity).toFixed(2)}</span>
-                                </div>
-                              ))}
-                            </div>
-                            <div className="mt-3 flex items-center justify-between text-sm text-gray-600">
-                              <div className="flex items-center gap-2">
-                                <Clock className="w-4 h-4" />
-                                <span>{order.deliveryMethod === 'delivery' ? 'Delivery' : 'Pickup'}</span>
-                              </div>
-                              <span className="font-semibold text-gray-900">Total: RM {(order.total || 0).toFixed(2)}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

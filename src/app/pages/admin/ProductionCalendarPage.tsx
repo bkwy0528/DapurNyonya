@@ -4,13 +4,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Badge } from '../../components/ui/badge';
 import { Input } from '../../components/ui/input';
 import { Button } from '../../components/ui/button';
-import { Calendar as CalendarIcon, ArrowLeft, Users, ChevronDown, ChevronUp, X } from 'lucide-react';
+import { Calendar as CalendarIcon, ArrowLeft, Users, ChevronDown, ChevronUp } from 'lucide-react';
 import { User } from '../../App';
 import { Calendar } from '../../components/ui/calendar';
-import type { DateRange } from 'react-day-picker';
-import { getProducts, getProductionBatches, saveProductionBatch, getBatchOrdersForBatch, adminCancelBatchOrder, getSettings, saveSettings } from '../../utils/db';
+import { getProducts, getProductionBatches, saveProductionBatch, getBatchOrdersForBatch, adminCancelBatchOrder } from '../../utils/db';
 import { ProductionBatch, BatchOrder, getBatchStatusLabel } from '../../utils/batchOrders';
-import { OrderWindow, normalizeOpenOrderRanges, normalizeOrderLeadBufferDays } from '../../utils/business';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
 interface ProductionCalendarPageProps {
@@ -45,23 +43,12 @@ export default function ProductionCalendarPage({ user: _user }: ProductionCalend
   const [batchOrdersCache, setBatchOrdersCache] = useState<Record<string, BatchOrder[]>>({});
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [saving, setSaving] = useState<string | null>(null);
-  const [openOrderRanges, setOpenOrderRanges] = useState<OrderWindow[]>([]);
-  const [rangeDraft, setRangeDraft] = useState<DateRange | undefined>(undefined);
-  const [savingRange, setSavingRange] = useState(false);
-  const [leadBufferDays, setLeadBufferDays] = useState(0);
-  const [leadBufferDraft, setLeadBufferDraft] = useState('0');
-  const [savingLeadBuffer, setSavingLeadBuffer] = useState(false);
-  const [activeTab, setActiveTab] = useState<'availability' | 'production'>('availability');
 
   const loadData = async () => {
     try {
-      const [allProducts, allBatches, settings] = await Promise.all([getProducts(), getProductionBatches(), getSettings()]);
+      const [allProducts, allBatches] = await Promise.all([getProducts(), getProductionBatches()]);
       setProducts(allProducts.filter((p: any) => p.batchTracked));
       setBatches(allBatches as ProductionBatch[]);
-      setOpenOrderRanges(normalizeOpenOrderRanges(settings?.openOrderRanges));
-      const buffer = normalizeOrderLeadBufferDays(settings?.orderLeadBufferDays);
-      setLeadBufferDays(buffer);
-      setLeadBufferDraft(String(buffer));
     } finally {
       setLoading(false);
     }
@@ -160,46 +147,6 @@ export default function ProductionCalendarPage({ user: _user }: ProductionCalend
     }
   };
 
-  const formatRangeDate = (ymd: string) =>
-    fromDateKey(ymd).toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' });
-
-  const handleAddRange = async () => {
-    if (!rangeDraft?.from || !rangeDraft?.to) return;
-    const updated = [...openOrderRanges, { start: toDateKey(rangeDraft.from), end: toDateKey(rangeDraft.to) }]
-      .sort((a, b) => a.start.localeCompare(b.start));
-    setSavingRange(true);
-    try {
-      await saveSettings({ openOrderRanges: updated });
-      setOpenOrderRanges(updated);
-      setRangeDraft(undefined);
-    } finally {
-      setSavingRange(false);
-    }
-  };
-
-  const handleRemoveRange = async (index: number) => {
-    const updated = openOrderRanges.filter((_, i) => i !== index);
-    setSavingRange(true);
-    try {
-      await saveSettings({ openOrderRanges: updated });
-      setOpenOrderRanges(updated);
-    } finally {
-      setSavingRange(false);
-    }
-  };
-
-  const handleSaveLeadBuffer = async () => {
-    const buffer = normalizeOrderLeadBufferDays(leadBufferDraft);
-    setSavingLeadBuffer(true);
-    try {
-      await saveSettings({ orderLeadBufferDays: buffer });
-      setLeadBufferDays(buffer);
-      setLeadBufferDraft(String(buffer));
-    } finally {
-      setSavingLeadBuffer(false);
-    }
-  };
-
   const toggleExpanded = async (batchId: string) => {
     if (expandedBatchId === batchId) {
       setExpandedBatchId(null);
@@ -237,99 +184,7 @@ export default function ProductionCalendarPage({ user: _user }: ProductionCalend
       </div>
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-6">
-        <div className="inline-flex rounded-lg border bg-gray-100 p-1">
-          <button
-            type="button"
-            onClick={() => setActiveTab('availability')}
-            className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-              activeTab === 'availability' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            General Availability
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('production')}
-            className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-              activeTab === 'production' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Production Calendar
-          </button>
-        </div>
-
-        {activeTab === 'availability' && (
-        <Card className="overflow-hidden border-0 shadow-lg bg-white/95">
-          <CardHeader className="brand-subtle-header">
-            <CardTitle className="text-2xl">General Order Availability</CardTitle>
-            <p className="text-sm text-gray-600 mt-1">
-              Choose which dates customers can pick at checkout for regular (non-batch) products, e.g. a festive
-              season window. Batch-tracked products are unaffected — they use the Production Calendar tab instead.
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-4 p-6">
-            {openOrderRanges.length === 0 && (
-              <div className="alert-box">
-                <p className="text-sm text-red-800">
-                  No dates are open yet — customers cannot check out with regular products until you add available dates below.
-                </p>
-              </div>
-            )}
-            {openOrderRanges.length > 0 && (
-              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                {openOrderRanges.map((range, index) => (
-                  <div key={`${range.start}_${range.end}`} className="flex items-center justify-between gap-3 rounded-lg border bg-white p-3">
-                    <p className="text-sm font-medium text-gray-900">
-                      {formatRangeDate(range.start)} – {formatRangeDate(range.end)}
-                    </p>
-                    <Button size="sm" variant="ghost" onClick={() => handleRemoveRange(index)} disabled={savingRange} className="h-8 px-2 text-red-600 hover:text-red-700 hover:bg-red-50">
-                      <X className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="space-y-3 rounded-lg border bg-gray-50 p-4">
-              <p className="text-sm font-medium text-gray-900">Add available dates</p>
-              <div className="flex justify-center rounded-lg border border-gray-200 bg-white">
-                <Calendar
-                  mode="range"
-                  selected={rangeDraft}
-                  onSelect={setRangeDraft}
-                />
-              </div>
-              <Button size="sm" onClick={handleAddRange} disabled={savingRange || !rangeDraft?.from || !rangeDraft?.to} className="brand-button">
-                Add available dates
-              </Button>
-            </div>
-
-            <div className="space-y-2 rounded-lg border bg-gray-50 p-4">
-              <p className="text-sm font-medium text-gray-900">Extra advance-notice buffer</p>
-              <p className="text-sm text-gray-600">
-                Added on top of each product's own Preparation Days before a delivery date becomes selectable at
-                checkout — e.g. a buffer of 1 guarantees at least one full day between payment and the start of
-                prep. Currently: <strong>{leadBufferDays} day{leadBufferDays !== 1 ? 's' : ''}</strong>.
-              </p>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={leadBufferDraft}
-                  onChange={(e) => setLeadBufferDraft(e.target.value)}
-                  className="w-24 h-10"
-                />
-                <Button size="sm" onClick={handleSaveLeadBuffer} disabled={savingLeadBuffer || normalizeOrderLeadBufferDays(leadBufferDraft) === leadBufferDays} className="brand-button">
-                  Save
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        )}
-
-        {activeTab === 'production' && (
-        products.length === 0 ? (
+        {products.length === 0 ? (
           <Card>
             <CardContent className="p-12 text-center">
               <p className="text-gray-600 text-lg">No batch-tracked products yet.</p>
@@ -474,7 +329,6 @@ export default function ProductionCalendarPage({ user: _user }: ProductionCalend
               </div>
             </CardContent>
           </Card>
-        )
         )}
       </div>
     </div>
