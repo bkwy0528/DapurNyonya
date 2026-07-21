@@ -20,8 +20,17 @@ const updateSW = registerSW({
       },
     });
   },
-  onRegisteredSW(swUrl) {
+  onRegisteredSW(swUrl, registration) {
     console.info(`DapurNyonya service worker registered: ${swUrl}`);
+    // Cold loads can sit on a stale cached sw.js for a while, so also poll
+    // for a new version whenever the tab regains focus/visibility.
+    if (registration) {
+      const checkForUpdate = () => registration.update().catch(() => {});
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") checkForUpdate();
+      });
+      setInterval(checkForUpdate, 30 * 60 * 1000);
+    }
   },
   onRegisterError(error) {
     console.error("DapurNyonya service worker registration failed", error);
