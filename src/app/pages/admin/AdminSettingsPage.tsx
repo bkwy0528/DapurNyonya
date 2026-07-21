@@ -12,6 +12,7 @@ import { User } from '../../App';
 import { getSettings, saveSettings } from '../../utils/db';
 import { DEFAULT_BATCH_PAYMENT_WINDOW_HOURS, getBatchPaymentWindowHours } from '../../utils/batchOrders';
 import { getNotificationSupport, isPushRegistered, registerForPush, unregisterForPush } from '../../utils/notifications';
+import { sendTestNotificationToSelf } from '../../utils/submitOrder';
 
 interface AdminSettingsPageProps {
   user: User;
@@ -79,6 +80,18 @@ export default function AdminSettingsPage({ user }: AdminSettingsPageProps) {
   const handleToggleNotifications = (checked: boolean) => {
     if (checked) handleEnableNotifications();
     else handleDisableNotifications();
+  };
+
+  const handleSendTestNotification = async () => {
+    setNotifBusy(true);
+    try {
+      const result = await sendTestNotificationToSelf();
+      toast.success(`Test notification sent to ${result.sent} device${result.sent === 1 ? '' : 's'}.`);
+    } catch (err: any) {
+      toast.error(err.message || 'Could not send test notification.');
+    } finally {
+      setNotifBusy(false);
+    }
   };
 
   useEffect(() => {
@@ -233,6 +246,16 @@ export default function AdminSettingsPage({ user }: AdminSettingsPageProps) {
                   onCheckedChange={handleToggleNotifications}
                 />
               </div>
+              {notifRegistered && (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  disabled={notifBusy}
+                  onClick={handleSendTestNotification}
+                >
+                  Send test notification
+                </Button>
+              )}
             </CardContent>
           </Card>
         )}
