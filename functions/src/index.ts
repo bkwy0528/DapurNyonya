@@ -479,9 +479,14 @@ export const createBatchPreOrder = onCall(
       throw new HttpsError('failed-precondition', `${product.name} is no longer available.`);
     }
     const prepDays = Number(product.prepDays) || 1;
-    if (toYmd(new Date()) >= getBatchPrepStartDate(data.productionDate, prepDays)) {
+    const prepStartDate = getBatchPrepStartDate(data.productionDate, prepDays);
+    if (toYmd(new Date()) >= prepStartDate) {
       throw new HttpsError('failed-precondition', 'This production date is no longer accepting pre-orders — preparation has already begun.');
     }
+    // Payment must never be allowed to close later than the same cutoff new
+    // pre-orders stop at — otherwise a late-tipping batch could get a payment
+    // deadline that lands after preparation was supposed to have started.
+    const prepStartMs = new Date(`${prepStartDate}T00:00:00`).getTime();
 
     const batchId = `${data.productId}_${data.productionDate}`;
     const batchRef = db.collection('productionBatches').doc(batchId);
@@ -514,7 +519,8 @@ export const createBatchPreOrder = onCall(
 
       const windowHours = Number((settingsSnap.data() as any)?.batchPaymentWindowHours) || 48;
       const nowIso = new Date().toISOString();
-      const newDeadlineIso = new Date(Date.now() + windowHours * 60 * 60 * 1000).toISOString();
+      const uncappedDeadlineMs = Date.now() + windowHours * 60 * 60 * 1000;
+      const newDeadlineIso = new Date(Math.min(uncappedDeadlineMs, prepStartMs)).toISOString();
 
       const batchUpdate: Record<string, any> = {
         currentQuantity: newQuantity,
@@ -744,6 +750,97 @@ export const submitBatchOrderPayment = onCall(
     });
 
     return { orderId, total };
+  }
+);
+
+interface AdminReinstateBatchOrderRequest {
+  batchOrderId: string;
+}
+
+// Admin-only: undoes an expired (unpaid) pre-order so the customer can pay
+// through the normal in-app flow instead of the admin taking payment
+// out-of-band — an out-of-band payment never creates an `orders` doc, so it's
+// invisible to Order Management, ingredient deduction, and analytics. Mirrors
+// createBatchPreOrder's capacity check and deadline clamp so a reinstated
+// order is held to the exact same rules a fresh pre-order would be.
+export const adminReinstateBatchOrder = onCall(
+  { region: 'asia-southeast1' },
+  async (request) => {
+    const email = request.auth?.token.email;
+    if (!email || !ADMIN_EMAILS.includes(email)) {
+      throw new HttpsError('permission-denied', 'Admin only.');
+    }
+    const data = request.data as AdminReinstateBatchOrderRequest;
+    if (!data.batchOrderId) {
+      throw new HttpsError('invalid-argument', 'Missing batchOrderId.');
+    }
+
+    const batchOrderRef = db.collection('batchOrders').doc(data.batchOrderId);
+
+    const newDeadlineIso = await db.runTransaction(async (tx) => {
+      const batchOrderSnap = await tx.get(batchOrderRef);
+      if (!batchOrderSnap.exists) {
+        throw new HttpsError('not-found', 'Pre-order not found.');
+      }
+      const batchOrder = batchOrderSnap.data() as any;
+      if (batchOrder.status !== 'expired') {
+        throw new HttpsError('failed-precondition', 'Only an expired pre-order can be reinstated.');
+      }
+
+      const batchRef = db.collection('productionBatches').doc(batchOrder.batchId);
+      const [batchSnap, productSnap, settingsSnap] = await Promise.all([
+        tx.get(batchRef),
+        db.collection('products').doc(batchOrder.productId).get(),
+        db.collection('settings').doc('business').get(),
+      ]);
+      if (!batchSnap.exists) {
+        throw new HttpsError('failed-precondition', 'This production date no longer exists.');
+      }
+      const batch = batchSnap.data() as any;
+      if (batch.batchStatus === 'cancelled') {
+        throw new HttpsError('failed-precondition', 'This production date was cancelled — it can no longer be reinstated into.');
+      }
+
+      const prepDays = Number((productSnap.data() as any)?.prepDays) || 1;
+      const prepStartDate = getBatchPrepStartDate(batchOrder.productionDate, prepDays);
+      if (toYmd(new Date()) >= prepStartDate) {
+        throw new HttpsError('failed-precondition', 'Preparation for this date has already begun — it can no longer be reinstated.');
+      }
+
+      const currentQuantity = Number(batch.currentQuantity) || 0;
+      const maxQuantity = Number(batch.maxQuantity) || 0;
+      if (maxQuantity > 0 && currentQuantity + batchOrder.quantity > maxQuantity) {
+        throw new HttpsError('failed-precondition', 'Not enough remaining capacity on this date to reinstate this quantity.');
+      }
+
+      const windowHours = Number((settingsSnap.data() as any)?.batchPaymentWindowHours) || 48;
+      const prepStartMs = new Date(`${prepStartDate}T00:00:00`).getTime();
+      const uncappedDeadlineMs = Date.now() + windowHours * 60 * 60 * 1000;
+      const deadlineIso = new Date(Math.min(uncappedDeadlineMs, prepStartMs)).toISOString();
+
+      tx.update(batchOrderRef, { status: 'awaiting_payment', paymentDeadline: deadlineIso });
+      tx.set(batchRef, {
+        currentQuantity: currentQuantity + batchOrder.quantity,
+        orderCount: FieldValue.increment(1),
+      }, { merge: true });
+
+      return deadlineIso;
+    });
+
+    const batchOrderSnap = await batchOrderRef.get();
+    const batchOrder = batchOrderSnap.data() as any;
+    const deadlineLabel = new Date(newDeadlineIso).toLocaleString('en-MY', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+    try {
+      await sendPushToUserCore(db, messaging, batchOrder.customerId, {
+        title: 'Your pre-order spot is back',
+        body: `${batchOrder.productName} — pay by ${deadlineLabel} to keep your spot.`,
+        url: '/customer/orders',
+      });
+    } catch (err) {
+      logger.error('Failed to send reinstated-pre-order push notification', { batchOrderId: data.batchOrderId, err });
+    }
+
+    return { paymentDeadline: newDeadlineIso };
   }
 );
 

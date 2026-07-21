@@ -8,8 +8,10 @@ import { Calendar as CalendarIcon, ArrowLeft, Users, ChevronDown, ChevronUp } fr
 import { User } from '../../App';
 import { Calendar } from '../../components/ui/calendar';
 import { getProducts, getProductionBatches, saveProductionBatch, getBatchOrdersForBatch, adminCancelBatchOrder } from '../../utils/db';
+import { adminReinstateBatchOrder } from '../../utils/submitOrder';
 import { ProductionBatch, BatchOrder, getBatchStatusLabel } from '../../utils/batchOrders';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
+import { toast } from 'sonner';
 
 interface ProductionCalendarPageProps {
   user: User;
@@ -142,6 +144,28 @@ export default function ProductionCalendarPage({ user: _user }: ProductionCalend
       setBatches(prev => prev.map(b => b.id === order.batchId
         ? { ...b, currentQuantity: Math.max(0, b.currentQuantity - order.quantity), orderCount: Math.max(0, b.orderCount - 1) }
         : b));
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handleReinstateOrder = async (order: BatchOrder) => {
+    if (!window.confirm(`Reinstate ${order.customerName}'s expired pre-order of ${order.quantity} ${order.unit}? They'll get a fresh payment window.`)) {
+      return;
+    }
+    setSaving(order.id);
+    try {
+      const { paymentDeadline } = await adminReinstateBatchOrder(order.id);
+      setBatchOrdersCache(prev => ({
+        ...prev,
+        [order.batchId]: (prev[order.batchId] || []).map(o => o.id === order.id ? { ...o, status: 'awaiting_payment' as const, paymentDeadline } : o),
+      }));
+      setBatches(prev => prev.map(b => b.id === order.batchId
+        ? { ...b, currentQuantity: b.currentQuantity + order.quantity, orderCount: b.orderCount + 1 }
+        : b));
+      toast.success(`${order.customerName}'s pre-order reinstated.`);
+    } catch (err: any) {
+      toast.error(err.message || 'Could not reinstate this pre-order.');
     } finally {
       setSaving(null);
     }
@@ -297,6 +321,11 @@ export default function ProductionCalendarPage({ user: _user }: ProductionCalend
                                           {(o.status === 'waiting' || o.status === 'awaiting_payment') && (
                                             <Button size="sm" variant="ghost" onClick={() => handleCancelOrder(o)} disabled={saving === o.id} className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50">
                                               Cancel
+                                            </Button>
+                                          )}
+                                          {o.status === 'expired' && (
+                                            <Button size="sm" variant="ghost" onClick={() => handleReinstateOrder(o)} disabled={saving === o.id} className="h-7 px-2 text-xs text-green-700 hover:text-green-800 hover:bg-green-50">
+                                              Reinstate
                                             </Button>
                                           )}
                                         </span>

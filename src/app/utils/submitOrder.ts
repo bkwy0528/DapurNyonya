@@ -77,3 +77,13 @@ export async function sendTestNotificationToSelf(): Promise<{ sent: number; prun
   const result = await callable({});
   return result.data as { sent: number; pruned: number };
 }
+
+// Admin-only: undoes an expired (unpaid) pre-order — see
+// functions/src/index.ts's adminReinstateBatchOrder for the capacity/deadline
+// rules this is held to.
+export async function adminReinstateBatchOrder(batchOrderId: string): Promise<{ paymentDeadline: string }> {
+  const functions = getFunctions(firebaseApp, 'asia-southeast1');
+  const callable = httpsCallable(functions, 'adminReinstateBatchOrder');
+  const result = await callable({ batchOrderId });
+  return result.data as { paymentDeadline: string };
+}
